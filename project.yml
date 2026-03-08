@@ -1,0 +1,35 @@
+name: MIDILoop
+options:
+  bundleIdPrefix: com.tamlyn
+  deploymentTarget:
+    iOS: "18.0"
+  xcodeVersion: "16.4"
+  generateEmptyDirectories: true
+
+packages:
+  MIDIKit:
+    url: https://github.com/orchetect/MIDIKit.git
+    from: "0.10.7"
+
+targets:
+  MIDILoop:
+    type: application
+    platform: iOS
+    sources:
+      - Sources
+    settings:
+      base:
+        INFOPLIST_FILE: Supporting/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.tamlyn.midiloop
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+    dependencies:
+      - package: MIDIKit
+        product: MIDIKitIO
+    entitlements:
+      path: Supporting/MIDILoop.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
