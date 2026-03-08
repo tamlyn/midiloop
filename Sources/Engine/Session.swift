@@ -27,7 +27,17 @@ final class Session {
     private(set) var selectedSlotIndex: Int = 0
     private(set) var masterLoopDuration: TimeInterval?
     private(set) var loopPosition: TimeInterval = 0
-    var noteQuantisation: NoteQuantisation = .off
+    var noteQuantisation: NoteQuantisation = .off {
+        didSet { UserDefaults.standard.set(noteQuantisation.rawValue, forKey: "noteQuantisation") }
+    }
+
+    init() {
+        let defaults = UserDefaults.standard
+        if let raw = defaults.object(forKey: "noteQuantisation") as? Int,
+           let q = NoteQuantisation(rawValue: raw) {
+            noteQuantisation = q
+        }
+    }
 
     var selectedSlot: Slot { slots[selectedSlotIndex] }
 

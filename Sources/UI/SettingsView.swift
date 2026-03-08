@@ -24,6 +24,11 @@ struct SettingsView: View {
                 }
 
                 if let engine {
+                    Section("MIDI") {
+                        @Bindable var midi = engine.midiService
+                        Toggle("Local Sound", isOn: $midi.passThrough)
+                    }
+
                     Section("Pedal Control") {
                         @Bindable var pedal = engine.pedalController
                         Picker("Control Change", selection: $pedal.controlChangeNumber) {

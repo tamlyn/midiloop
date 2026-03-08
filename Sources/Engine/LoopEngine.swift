@@ -11,10 +11,11 @@ final class LoopEngine {
     let pedalController: PedalController
 
     private var displayLink: CADisplayLink?
-    private var recordingStartTime: CFTimeInterval?
-    private var playbackStartTime: CFTimeInterval = 0
+    var recordingStartTime: CFTimeInterval?
+    var playbackStartTime: CFTimeInterval = 0
 
     private var slotPlaybackIndices: [Int] = [0, 0, 0, 0]
+    var slotPlaybackOffsets: [TimeInterval] = [0, 0, 0, 0]
 
     /// Tracks the last master loop position to detect boundary crossings.
     private var lastMasterPosition: TimeInterval = 0
@@ -164,6 +165,7 @@ final class LoopEngine {
 
         slot.stopRecording(duration: finalDuration)
         slotPlaybackIndices[slot.id] = 0
+        slotPlaybackOffsets[slot.id] = startTime - playbackStartTime
     }
 
     // MARK: - Armed → Recording transition
@@ -241,7 +243,8 @@ final class LoopEngine {
             guard slot.state == .playing || slot.state == .muted else { continue }
             guard slot.duration > 0 else { continue }
 
-            let slotPosition = elapsed.truncatingRemainder(dividingBy: slot.duration)
+            let slotElapsed = elapsed - slotPlaybackOffsets[slot.id]
+            let slotPosition = slotElapsed.truncatingRemainder(dividingBy: slot.duration)
             slot.playbackPosition = slotPosition
 
             guard slot.state == .playing, !slot.events.isEmpty else { continue }

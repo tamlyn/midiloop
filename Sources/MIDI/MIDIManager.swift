@@ -13,7 +13,9 @@ final class MIDIService: @unchecked Sendable {
     var onMIDIEvent: (@Sendable (_ event: MIDIEvent) -> Void)?
 
     /// When true, incoming events are echoed to the output immediately.
-    var passThrough = true
+    var passThrough = true {
+        didSet { UserDefaults.standard.set(passThrough, forKey: "passThrough") }
+    }
 
     /// CC numbers that should NOT be passed through (consumed by pedal control).
     var consumedCCs: Set<UInt8> = [67]
@@ -22,6 +24,10 @@ final class MIDIService: @unchecked Sendable {
     static let outputConnectionTag = "MainOutput"
 
     init() {
+        if UserDefaults.standard.object(forKey: "passThrough") != nil {
+            passThrough = UserDefaults.standard.bool(forKey: "passThrough")
+        }
+
         midi = ObservableMIDIManager(
             clientName: "MIDILoop",
             model: "MIDILoop",

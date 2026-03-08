@@ -20,6 +20,14 @@ xcrun devicectl device install app --device 00008120-00164CC40E080032 /Users/tam
 
 Always regenerate the Xcode project with `xcodegen generate` after editing `project.yml`.
 
+### Tests
+
+```sh
+xcodebuild test -project MIDILoop.xcodeproj -scheme MIDILoop -destination 'platform=iOS Simulator,name=iPhone 16 Pro'
+```
+
+Uses Swift Testing (`import Testing`), not XCTest. Tests need `@MainActor` for `@Observable` types.
+
 ## Architecture
 
 ```
@@ -45,6 +53,7 @@ project.yml    xcodegen project spec
 - **Pass-through on MIDI thread**: Pass-through echoes events in `MIDIService.handleIncoming()` directly, avoiding main actor dispatch latency. Recording/pedal processing dispatches to main actor.
 - **CADisplayLink for playback**: Fires on every screen refresh (~120Hz on iPad Pro). Walks each slot's event list and sends events whose timestamps have been reached.
 - **No external dependencies** beyond MIDIKit.
+- **UI theme**: `Theme.swift` centralises colours, radii, and per-slot clip colours. FL Studio-inspired dark panel aesthetic.
 
 ## Swift 6 concurrency patterns
 

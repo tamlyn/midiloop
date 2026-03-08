@@ -14,10 +14,18 @@ enum PedalEvent {
 @MainActor @Observable
 final class PedalController {
     var controlChangeNumber: UInt8 = 67 {
-        didSet { onCCNumberChanged?(controlChangeNumber) }
+        didSet {
+            onCCNumberChanged?(controlChangeNumber)
+            UserDefaults.standard.set(controlChangeNumber, forKey: "pedalCC")
+        }
     }
     var onPedalEvent: ((PedalEvent) -> Void)?
     var onCCNumberChanged: ((_ cc: UInt8) -> Void)?
+
+    init() {
+        let saved = UserDefaults.standard.integer(forKey: "pedalCC")
+        if saved > 0 { controlChangeNumber = UInt8(saved) }
+    }
 
     private let longPressThreshold: TimeInterval = 0.5
 
