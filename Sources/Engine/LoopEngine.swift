@@ -16,6 +16,12 @@ final class LoopEngine {
 
     private var slotPlaybackIndices: [Int] = [0, 0, 0, 0]
 
+    /// Tracks the last master loop position to detect boundary crossings.
+    private var lastMasterPosition: TimeInterval = 0
+
+    /// Set when recording stops, to prevent quickPress from toggling mute.
+    private var suppressNextQuickPress = false
+
     init(session: Session, midiService: MIDIService) {
         self.session = session
         self.midiService = midiService
@@ -58,16 +64,20 @@ final class LoopEngine {
         }
 
         let selectedSlot = session.selectedSlot
-        if selectedSlot.state == .recording {
-            if recordingStartTime == nil {
-                if case .noteOn = event {
-                    recordingStartTime = CACurrentMediaTime()
-                } else {
-                    return
-                }
-            }
 
-            let timestamp = CACurrentMediaTime() - recordingStartTime!
+        // First loop: armed slot transitions to recording on first note
+        if selectedSlot.state == .armed && session.masterLoopDuration == nil {
+            if case .noteOn = event {
+                selectedSlot.startRecording()
+                recordingStartTime = CACurrentMediaTime()
+            } else {
+                return
+            }
+        }
+
+        if selectedSlot.state == .recording {
+            guard let startTime = recordingStartTime else { return }
+            let timestamp = CACurrentMediaTime() - startTime
             selectedSlot.addEvent(RecordedEvent(timestamp: timestamp, event: event))
         }
     }
@@ -79,27 +89,31 @@ final class LoopEngine {
 
         switch event {
         case .down:
-            // On an empty slot, start recording immediately
             if slot.state == .empty {
-                startRecording()
+                slot.arm()
             }
 
         case .up:
-            // If recording, stop on release
             if slot.state == .recording {
                 stopRecording(slot)
+                suppressNextQuickPress = true
+            } else if slot.state == .armed {
+                // Released before recording started — cancel
+                slot.clear()
+                suppressNextQuickPress = true
             }
 
         case .quickPress:
-            // On a non-empty slot, toggle mute
+            if suppressNextQuickPress {
+                suppressNextQuickPress = false
+                return
+            }
             if slot.state == .playing || slot.state == .muted {
                 toggleMute()
             }
 
         case .longPress:
-            // Clear and advance (unless we're recording — long hold
-            // during recording is just a long recording)
-            if slot.state != .recording {
+            if slot.state != .recording && slot.state != .armed {
                 clearAndAdvance()
             }
         }
@@ -110,8 +124,7 @@ final class LoopEngine {
     func startRecording() {
         let slot = session.selectedSlot
         guard slot.state == .empty else { return }
-        slot.startRecording()
-        recordingStartTime = nil
+        slot.arm()
     }
 
     func toggleRecording() {
@@ -119,6 +132,8 @@ final class LoopEngine {
         switch slot.state {
         case .empty:
             startRecording()
+        case .armed:
+            slot.clear()
         case .recording:
             stopRecording(slot)
         default:
@@ -149,6 +164,16 @@ final class LoopEngine {
 
         slot.stopRecording(duration: finalDuration)
         slotPlaybackIndices[slot.id] = 0
+    }
+
+    // MARK: - Armed → Recording transition
+
+    /// Called from playbackTick when the master loop wraps around.
+    private func transitionArmedSlots(boundaryTime: CFTimeInterval) {
+        for slot in session.slots where slot.state == .armed {
+            slot.startRecording()
+            recordingStartTime = boundaryTime
+        }
     }
 
     // MARK: - Mute/Unmute
@@ -202,9 +227,15 @@ final class LoopEngine {
         let now = CACurrentMediaTime()
         let elapsed = now - playbackStartTime
         let masterPosition = elapsed.truncatingRemainder(dividingBy: masterDuration)
-        session.updateLoopPosition(masterPosition)
 
-        checkAutoStopRecording(now: now, masterDuration: masterDuration)
+        // Detect master loop boundary crossing
+        if masterPosition < lastMasterPosition {
+            // The loop just wrapped — transition any armed slots
+            let boundaryTime = now - masterPosition
+            transitionArmedSlots(boundaryTime: boundaryTime)
+        }
+        lastMasterPosition = masterPosition
+        session.updateLoopPosition(masterPosition)
 
         for slot in session.slots {
             guard slot.state == .playing || slot.state == .muted else { continue }
@@ -250,23 +281,6 @@ final class LoopEngine {
             slot.trackNoteOff(note: payload.note.number, channel: payload.channel)
         default:
             break
-        }
-    }
-
-    // MARK: - Auto-Stop Recording
-
-    private func checkAutoStopRecording(now: CFTimeInterval, masterDuration: TimeInterval) {
-        let slot = session.selectedSlot
-        guard slot.state == .recording, let startTime = recordingStartTime else { return }
-
-        let elapsed = now - startTime
-        guard elapsed > masterDuration * 0.5 else { return }
-
-        // Snap to nearest power-of-2 boundary
-        let target = session.quantisedDuration(for: elapsed)
-        let tolerance = masterDuration * 0.05
-        if elapsed >= target - tolerance {
-            stopRecording(slot)
         }
     }
 

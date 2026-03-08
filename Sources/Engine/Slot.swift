@@ -15,6 +15,8 @@ struct NoteBar {
 
 enum SlotState {
     case empty
+    /// Waiting for the next master loop boundary to begin recording.
+    case armed
     case recording
     case playing
     case muted
@@ -38,8 +40,15 @@ final class Slot: Identifiable {
         self.id = id
     }
 
-    func startRecording() {
+    func arm() {
         guard state == .empty else { return }
+        state = .armed
+        events = []
+        noteBars = []
+    }
+
+    func startRecording() {
+        guard state == .empty || state == .armed else { return }
         state = .recording
         events = []
         noteBars = []

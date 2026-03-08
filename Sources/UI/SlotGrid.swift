@@ -33,7 +33,7 @@ struct SlotGrid: View {
     private func handleTap(_ slot: Slot) {
         if slot.id == session.selectedSlotIndex {
             switch slot.state {
-            case .empty, .recording:
+            case .empty, .armed, .recording:
                 engine?.toggleRecording()
             case .playing, .muted:
                 engine?.toggleMute()
@@ -93,7 +93,7 @@ struct SlotView: View {
                     Text(stateLabel)
                         .font(.title3.weight(.semibold))
 
-                    if slot.state == .recording {
+                    if slot.state == .armed || slot.state == .recording {
                         Circle()
                             .fill(.white)
                             .frame(width: 12, height: 12)
@@ -114,6 +114,7 @@ struct SlotView: View {
     private var stateLabel: String {
         switch slot.state {
         case .empty: "EMPTY"
+        case .armed: "ARMED"
         case .recording: "REC"
         case .playing: "PLAY"
         case .muted: "MUTED"
@@ -123,6 +124,7 @@ struct SlotView: View {
     private var backgroundColour: Color {
         switch slot.state {
         case .empty: .gray.opacity(0.25)
+        case .armed: .red.opacity(0.4)
         case .recording: .red
         case .playing: .green.opacity(0.75)
         case .muted: .orange.opacity(0.5)
