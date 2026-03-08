@@ -48,25 +48,63 @@ struct SlotView: View {
     let slot: Slot
     let isSelected: Bool
 
+    private var hasNotes: Bool {
+        !slot.noteBars.isEmpty
+    }
+
     var body: some View {
-        VStack(spacing: 12) {
-            Text("\(slot.id + 1)")
-                .font(.system(size: 48, weight: .bold, design: .rounded))
+        ZStack {
+            // Background
+            RoundedRectangle(cornerRadius: 20)
+                .fill(backgroundColour)
 
-            Text(stateLabel)
-                .font(.title3.weight(.semibold))
+            if hasNotes {
+                // Piano roll fills the tile
+                NoteRollView(
+                    noteBars: slot.noteBars,
+                    duration: slot.duration,
+                    playbackPosition: slot.playbackPosition,
+                    isPlaying: slot.state == .playing
+                )
+                .padding(12)
+                .allowsHitTesting(false)
 
-            if slot.state == .recording {
-                // Pulsing indicator
-                Circle()
-                    .fill(.white)
-                    .frame(width: 12, height: 12)
-                    .modifier(PulseAnimation())
+                // Slot number and state as overlay at top-left
+                VStack {
+                    HStack {
+                        Text("\(slot.id + 1)")
+                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(.black.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+                        Text(stateLabel)
+                            .font(.caption.weight(.semibold))
+                        Spacer()
+                    }
+                    .padding(12)
+                    Spacer()
+                }
+            } else {
+                // Empty/recording state: large centred content
+                VStack(spacing: 12) {
+                    Text("\(slot.id + 1)")
+                        .font(.system(size: 48, weight: .bold, design: .rounded))
+
+                    Text(stateLabel)
+                        .font(.title3.weight(.semibold))
+
+                    if slot.state == .recording {
+                        Circle()
+                            .fill(.white)
+                            .frame(width: 12, height: 12)
+                            .modifier(PulseAnimation())
+                    }
+                }
             }
         }
         .foregroundStyle(.white)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(backgroundColour, in: RoundedRectangle(cornerRadius: 20))
+        .clipShape(RoundedRectangle(cornerRadius: 20))
         .overlay(
             RoundedRectangle(cornerRadius: 20)
                 .stroke(isSelected ? .white : .clear, lineWidth: 4)

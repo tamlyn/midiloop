@@ -21,7 +21,6 @@ final class LoopEngine {
         self.midiService = midiService
         self.pedalController = PedalController()
 
-        // Keep consumed CCs in sync with pedal controller
         midiService.consumedCCs = [pedalController.controlChangeNumber]
 
         midiService.onMIDIEvent = { [weak self] event in
@@ -30,8 +29,8 @@ final class LoopEngine {
             }
         }
 
-        pedalController.onGesture = { [weak self] gesture in
-            self?.handlePedalGesture(gesture)
+        pedalController.onPedalEvent = { [weak self] event in
+            self?.handlePedalEvent(event)
         }
 
         pedalController.onCCNumberChanged = { [weak midiService] cc in
@@ -49,7 +48,6 @@ final class LoopEngine {
     // MARK: - Incoming MIDI
 
     private func handleIncomingEvent(_ event: MIDIEvent) {
-        // Check if the pedal controller consumes this event
         if case .cc(let payload) = event {
             if pedalController.handleCC(
                 number: UInt8(payload.controller.number),
@@ -59,11 +57,9 @@ final class LoopEngine {
             }
         }
 
-        // If a slot is recording, capture the event
         let selectedSlot = session.selectedSlot
         if selectedSlot.state == .recording {
             if recordingStartTime == nil {
-                // Recording starts on the first note
                 if case .noteOn = event {
                     recordingStartTime = CACurrentMediaTime()
                 } else {
@@ -76,27 +72,53 @@ final class LoopEngine {
         }
     }
 
-    // MARK: - Pedal Gestures
+    // MARK: - Pedal Events
 
-    private func handlePedalGesture(_ gesture: PedalGesture) {
-        switch gesture {
+    private func handlePedalEvent(_ event: PedalEvent) {
+        let slot = session.selectedSlot
+
+        switch event {
+        case .down:
+            // On an empty slot, start recording immediately
+            if slot.state == .empty {
+                startRecording()
+            }
+
+        case .up:
+            // If recording, stop on release
+            if slot.state == .recording {
+                stopRecording(slot)
+            }
+
         case .quickPress:
-            toggleRecording()
-        case .doublePress:
-            toggleMute()
+            // On a non-empty slot, toggle mute
+            if slot.state == .playing || slot.state == .muted {
+                toggleMute()
+            }
+
         case .longPress:
-            clearAndAdvance()
+            // Clear and advance (unless we're recording — long hold
+            // during recording is just a long recording)
+            if slot.state != .recording {
+                clearAndAdvance()
+            }
         }
     }
 
     // MARK: - Recording
 
+    func startRecording() {
+        let slot = session.selectedSlot
+        guard slot.state == .empty else { return }
+        slot.startRecording()
+        recordingStartTime = nil
+    }
+
     func toggleRecording() {
         let slot = session.selectedSlot
         switch slot.state {
         case .empty:
-            slot.startRecording()
-            recordingStartTime = nil
+            startRecording()
         case .recording:
             stopRecording(slot)
         default:
@@ -121,7 +143,6 @@ final class LoopEngine {
             finalDuration = session.quantisedDuration(for: rawDuration)
         }
 
-        // Apply note quantisation if enabled
         if session.noteQuantisation != .off, let master = session.masterLoopDuration {
             slot.quantiseEvents(loopDuration: master, grid: session.noteQuantisation)
         }
@@ -183,13 +204,16 @@ final class LoopEngine {
         let masterPosition = elapsed.truncatingRemainder(dividingBy: masterDuration)
         session.updateLoopPosition(masterPosition)
 
-        // Auto-stop recording at quantisation boundary
         checkAutoStopRecording(now: now, masterDuration: masterDuration)
 
         for slot in session.slots {
-            guard slot.state == .playing, !slot.events.isEmpty else { continue }
+            guard slot.state == .playing || slot.state == .muted else { continue }
+            guard slot.duration > 0 else { continue }
 
             let slotPosition = elapsed.truncatingRemainder(dividingBy: slot.duration)
+            slot.playbackPosition = slotPosition
+
+            guard slot.state == .playing, !slot.events.isEmpty else { continue }
             let index = slotPlaybackIndices[slot.id]
 
             // Detect loop wrap-around
@@ -207,7 +231,6 @@ final class LoopEngine {
                 }
             }
 
-            // Play events up to the current position
             var idx = slotPlaybackIndices[slot.id]
             while idx < slot.events.count && slot.events[idx].timestamp <= slotPosition {
                 let recorded = slot.events[idx]
@@ -232,26 +255,17 @@ final class LoopEngine {
 
     // MARK: - Auto-Stop Recording
 
-    /// For subsequent recordings (when master loop exists), auto-stop when
-    /// the recording duration crosses the nearest quantisation boundary.
-    /// The boundary is the nearest multiple of the master loop duration.
     private func checkAutoStopRecording(now: CFTimeInterval, masterDuration: TimeInterval) {
         let slot = session.selectedSlot
         guard slot.state == .recording, let startTime = recordingStartTime else { return }
 
         let elapsed = now - startTime
-
-        // Don't auto-stop until at least half a master loop has passed,
-        // to avoid triggering on very short recordings.
         guard elapsed > masterDuration * 0.5 else { return }
 
-        // Find which multiple boundary we're nearest to
-        let nearestMultiple = round(elapsed / masterDuration)
-        let boundary = nearestMultiple * masterDuration
-
-        // Auto-stop if we've crossed the boundary (with a small tolerance)
+        // Snap to nearest power-of-2 boundary
+        let target = session.quantisedDuration(for: elapsed)
         let tolerance = masterDuration * 0.05
-        if elapsed >= boundary - tolerance {
+        if elapsed >= target - tolerance {
             stopRecording(slot)
         }
     }

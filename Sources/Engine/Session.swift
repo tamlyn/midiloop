@@ -48,11 +48,15 @@ final class Session {
         masterLoopDuration = duration
     }
 
-    /// Quantise a recording duration to the nearest multiple of the master loop.
+    /// Quantise a recording duration to the nearest power-of-2 multiple
+    /// of the master loop (e.g. 1/2x, 1x, 2x, 4x).
     func quantisedDuration(for rawDuration: TimeInterval) -> TimeInterval {
-        guard let master = masterLoopDuration else { return rawDuration }
-        let multiple = max(1, Int(round(rawDuration / master)))
-        return master * Double(multiple)
+        guard let master = masterLoopDuration, master > 0 else { return rawDuration }
+        let ratio = rawDuration / master
+        // Snap to nearest power of 2: ..., 0.25, 0.5, 1, 2, 4, 8, ...
+        let power = Foundation.round(Foundation.log2(ratio))
+        let multiple = Foundation.pow(2.0, power)
+        return master * max(multiple, 0.25)
     }
 
     func clearAll() {

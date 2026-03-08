@@ -1,28 +1,28 @@
 import Foundation
 
-enum PedalGesture {
+enum PedalEvent {
+    case down
+    case up
+    /// Quick press completed (down then up within threshold, no double detected)
     case quickPress
-    case doublePress
+    /// Held beyond the long-press threshold
     case longPress
 }
 
-/// Recognises gestures from soft pedal CC messages.
-/// Quick press: press and release within the threshold.
-/// Double press: two quick presses within the double-press window.
-/// Long press: held beyond the long-press threshold.
+/// Filters soft pedal CC messages and emits pedal events.
+/// Reports down/up immediately, plus gesture detection (quick/long press).
 @MainActor @Observable
 final class PedalController {
     var controlChangeNumber: UInt8 = 67 {
         didSet { onCCNumberChanged?(controlChangeNumber) }
     }
-    var onGesture: ((PedalGesture) -> Void)?
+    var onPedalEvent: ((PedalEvent) -> Void)?
     var onCCNumberChanged: ((_ cc: UInt8) -> Void)?
 
     private let longPressThreshold: TimeInterval = 0.5
-    private let doublePressWindow: TimeInterval = 0.35
 
     private var pressTime: Date?
-    private var lastQuickPressTime: Date?
+    private var longPressFired = false
     private var longPressTimer: Timer?
 
     /// Call when a CC message is received. Returns true if consumed.
@@ -40,13 +40,16 @@ final class PedalController {
 
     private func pedalDown() {
         pressTime = Date()
-        longPressTimer?.invalidate()
+        longPressFired = false
 
-        // Timer fires on the main run loop — safe to access main actor state
+        // Always emit down immediately
+        onPedalEvent?(.down)
+
+        longPressTimer?.invalidate()
         longPressTimer = Timer.scheduledTimer(withTimeInterval: longPressThreshold, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.onGesture?(.longPress)
-                self?.pressTime = nil
+                self?.longPressFired = true
+                self?.onPedalEvent?(.longPress)
             }
         }
     }
@@ -55,25 +58,16 @@ final class PedalController {
         longPressTimer?.invalidate()
         longPressTimer = nil
 
+        // Always emit up immediately
+        onPedalEvent?(.up)
+
         guard let press = pressTime else { return }
         let holdDuration = Date().timeIntervalSince(press)
         pressTime = nil
 
-        guard holdDuration < longPressThreshold else { return }
-
-        if let lastQuick = lastQuickPressTime,
-           Date().timeIntervalSince(lastQuick) < doublePressWindow {
-            lastQuickPressTime = nil
-            onGesture?(.doublePress)
-        } else {
-            lastQuickPressTime = Date()
-            Timer.scheduledTimer(withTimeInterval: doublePressWindow, repeats: false) { [weak self] _ in
-                MainActor.assumeIsolated {
-                    guard let self, self.lastQuickPressTime != nil else { return }
-                    self.lastQuickPressTime = nil
-                    self.onGesture?(.quickPress)
-                }
-            }
+        // If it was a short press and long-press didn't fire, emit quickPress
+        if holdDuration < longPressThreshold && !longPressFired {
+            onPedalEvent?(.quickPress)
         }
     }
 }

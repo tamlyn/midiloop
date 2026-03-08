@@ -6,6 +6,13 @@ struct RecordedEvent {
     let event: MIDIEvent
 }
 
+/// A note rendered as a horizontal bar in the piano roll.
+struct NoteBar {
+    let note: UInt8
+    let startTime: TimeInterval
+    let endTime: TimeInterval
+}
+
 enum SlotState {
     case empty
     case recording
@@ -19,9 +26,12 @@ final class Slot: Identifiable {
     private(set) var state: SlotState = .empty
     private(set) var events: [RecordedEvent] = []
     private(set) var duration: TimeInterval = 0
+    private(set) var noteBars: [NoteBar] = []
+
+    /// Current position within this slot's loop cycle, updated by the engine.
+    var playbackPosition: TimeInterval = 0
 
     /// Notes currently sounding from this slot's playback.
-    /// Tracked for stuck note prevention.
     private(set) var activeNotes: Set<NoteKey> = []
 
     init(id: Int) {
@@ -32,6 +42,7 @@ final class Slot: Identifiable {
         guard state == .empty else { return }
         state = .recording
         events = []
+        noteBars = []
     }
 
     func addEvent(_ event: RecordedEvent) {
@@ -47,6 +58,7 @@ final class Slot: Identifiable {
     func stopRecording(duration: TimeInterval) {
         guard state == .recording else { return }
         self.duration = duration
+        noteBars = Self.buildNoteBars(from: events, duration: duration)
         state = .playing
     }
 
@@ -65,6 +77,8 @@ final class Slot: Identifiable {
         state = .empty
         events = []
         duration = 0
+        noteBars = []
+        playbackPosition = 0
         activeNotes = []
     }
 
@@ -78,6 +92,47 @@ final class Slot: Identifiable {
 
     func clearActiveNotes() {
         activeNotes = []
+    }
+
+    // MARK: - Note bar computation
+
+    /// Pairs note-on/off events into bars for visualisation.
+    private static func buildNoteBars(from events: [RecordedEvent], duration: TimeInterval) -> [NoteBar] {
+        // Track open notes: (note, channel) -> start time
+        var open: [NoteKey: TimeInterval] = [:]
+        var bars: [NoteBar] = []
+
+        for recorded in events {
+            switch recorded.event {
+            case .noteOn(let payload):
+                let key = NoteKey(note: payload.note.number, channel: payload.channel)
+                open[key] = recorded.timestamp
+
+            case .noteOff(let payload):
+                let key = NoteKey(note: payload.note.number, channel: payload.channel)
+                if let start = open.removeValue(forKey: key) {
+                    bars.append(NoteBar(
+                        note: UInt8(payload.note.number),
+                        startTime: start,
+                        endTime: recorded.timestamp
+                    ))
+                }
+
+            default:
+                break
+            }
+        }
+
+        // Close any notes still open at the end of the loop
+        for (key, start) in open {
+            bars.append(NoteBar(
+                note: UInt8(key.note),
+                startTime: start,
+                endTime: duration
+            ))
+        }
+
+        return bars
     }
 }
 
