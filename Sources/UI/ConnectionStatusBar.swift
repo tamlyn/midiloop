@@ -1,13 +1,25 @@
 import SwiftUI
+import MIDIKitIO
 
 struct ConnectionStatusBar: View {
-    // TODO: observe MIDI connection state
+    @Environment(ObservableMIDIManager.self) private var midiManager
 
     var body: some View {
         HStack {
-            Image(systemName: "pianokeys")
-            Text("No device connected")
-                .font(.subheadline)
+            let outputCount = midiManager.endpoints.outputs.count
+            Image(systemName: outputCount > 0 ? "pianokeys" : "pianokeys.inverse")
+                .foregroundStyle(outputCount > 0 ? .green : .secondary)
+
+            if outputCount > 0 {
+                let names = midiManager.endpoints.outputs.map(\.name).joined(separator: ", ")
+                Text(names)
+                    .font(.subheadline)
+            } else {
+                Text("No MIDI device connected")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
             Spacer()
         }
         .padding(.horizontal)

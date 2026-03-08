@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SlotGrid: View {
     @Environment(Session.self) private var session
+    @Environment(LoopEngine.self) private var engine: LoopEngine?
 
     var body: some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
@@ -18,17 +19,11 @@ struct SlotGrid: View {
     private func handleTap(_ slot: Slot) {
         let index = slot.id
         if index == session.selectedSlotIndex {
-            // Tap on selected slot: toggle state
             switch slot.state {
-            case .empty:
-                slot.startRecording()
-            case .recording:
-                // TODO: stop recording via engine
-                break
-            case .playing:
-                slot.toggleMute()
-            case .muted:
-                slot.toggleMute()
+            case .empty, .recording:
+                engine?.toggleRecording()
+            case .playing, .muted:
+                engine?.toggleMute()
             }
         } else {
             session.selectSlot(index)

@@ -2,6 +2,8 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(Session.self) private var session
+    @Environment(MIDIService.self) private var midiService
+    @Environment(LoopEngine.self) private var engine: LoopEngine?
 
     var body: some View {
         VStack(spacing: 24) {
@@ -13,11 +15,12 @@ struct ContentView: View {
 
             HStack(spacing: 16) {
                 Button("All Notes Off") {
-                    // TODO: send CC#123
+                    engine?.sendAllNotesOff()
                 }
                 .buttonStyle(ActionButtonStyle(colour: .red))
 
                 Button("Clear All") {
+                    engine?.sendAllNotesOff()
                     session.clearAll()
                 }
                 .buttonStyle(ActionButtonStyle(colour: .gray))
@@ -25,6 +28,7 @@ struct ContentView: View {
             .padding(.horizontal)
         }
         .padding()
+        .preferredColorScheme(.dark)
     }
 }
 

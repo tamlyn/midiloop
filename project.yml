@@ -28,6 +28,8 @@ targets:
     dependencies:
       - package: MIDIKit
         product: MIDIKitIO
+      - package: MIDIKit
+        product: MIDIKitUI
     entitlements:
       path: Supporting/MIDILoop.entitlements
       properties:

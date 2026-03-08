@@ -10,7 +10,7 @@ enum PedalGesture {
 /// Quick press: press and release within the threshold.
 /// Double press: two quick presses within the double-press window.
 /// Long press: held beyond the long-press threshold.
-@Observable
+@MainActor @Observable
 final class PedalController {
     var controlChangeNumber: UInt8 = 67
     var onGesture: ((PedalGesture) -> Void)?
@@ -26,9 +26,7 @@ final class PedalController {
     func handleCC(number: UInt8, value: UInt8) -> Bool {
         guard number == controlChangeNumber else { return false }
 
-        let isPressed = value >= 64
-
-        if isPressed {
+        if value >= 64 {
             pedalDown()
         } else {
             pedalUp()
@@ -40,9 +38,13 @@ final class PedalController {
     private func pedalDown() {
         pressTime = Date()
         longPressTimer?.invalidate()
+
+        // Timer fires on the main run loop — safe to access main actor state
         longPressTimer = Timer.scheduledTimer(withTimeInterval: longPressThreshold, repeats: false) { [weak self] _ in
-            self?.onGesture?(.longPress)
-            self?.pressTime = nil
+            MainActor.assumeIsolated {
+                self?.onGesture?(.longPress)
+                self?.pressTime = nil
+            }
         }
     }
 
@@ -56,18 +58,18 @@ final class PedalController {
 
         guard holdDuration < longPressThreshold else { return }
 
-        // Quick press detected — check for double press
         if let lastQuick = lastQuickPressTime,
            Date().timeIntervalSince(lastQuick) < doublePressWindow {
             lastQuickPressTime = nil
             onGesture?(.doublePress)
         } else {
             lastQuickPressTime = Date()
-            // Delay to see if a second press follows
             Timer.scheduledTimer(withTimeInterval: doublePressWindow, repeats: false) { [weak self] _ in
-                guard let self, self.lastQuickPressTime != nil else { return }
-                self.lastQuickPressTime = nil
-                self.onGesture?(.quickPress)
+                MainActor.assumeIsolated {
+                    guard let self, self.lastQuickPressTime != nil else { return }
+                    self.lastQuickPressTime = nil
+                    self.onGesture?(.quickPress)
+                }
             }
         }
     }
