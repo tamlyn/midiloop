@@ -5,7 +5,7 @@ struct SlotGrid: View {
     @Environment(LoopEngine.self) private var engine: LoopEngine?
 
     var body: some View {
-        Grid(horizontalSpacing: 16, verticalSpacing: 16) {
+        Grid(horizontalSpacing: 10, verticalSpacing: 10) {
             GridRow {
                 slotButton(session.slots[0])
                 slotButton(session.slots[1])
@@ -21,7 +21,7 @@ struct SlotGrid: View {
     private func slotButton(_ slot: Slot) -> some View {
         let isSelected = slot.id == session.selectedSlotIndex
         SlotView(slot: slot, isSelected: isSelected)
-            .contentShape(RoundedRectangle(cornerRadius: 20))
+            .contentShape(RoundedRectangle(cornerRadius: Theme.slotRadius))
             .onTapGesture {
                 handleTap(slot)
             }
@@ -52,11 +52,33 @@ struct SlotView: View {
         !slot.noteBars.isEmpty
     }
 
+    private var clipColour: Color {
+        Theme.slotColour(index: slot.id)
+    }
+
+    private var accentColour: Color {
+        switch slot.state {
+        case .armed: Theme.armed
+        case .recording: Theme.recording
+        default: clipColour
+        }
+    }
+
     var body: some View {
-        ZStack {
-            // Background
-            RoundedRectangle(cornerRadius: 20)
-                .fill(backgroundColour)
+        ZStack(alignment: .leading) {
+            // Dark panel background
+            RoundedRectangle(cornerRadius: Theme.slotRadius)
+                .fill(Theme.panel)
+
+            // Coloured left accent strip
+            UnevenRoundedRectangle(
+                topLeadingRadius: Theme.slotRadius,
+                bottomLeadingRadius: Theme.slotRadius,
+                bottomTrailingRadius: 0,
+                topTrailingRadius: 0
+            )
+            .fill(accentColour)
+            .frame(width: 5)
 
             if hasNotes {
                 // Piano roll fills the tile
@@ -64,50 +86,64 @@ struct SlotView: View {
                     noteBars: slot.noteBars,
                     duration: slot.duration,
                     playbackPosition: slot.playbackPosition,
-                    isPlaying: slot.state == .playing
+                    showPlayhead: slot.state == .playing || slot.state == .muted,
+                    noteColour: slot.state == .muted
+                        ? clipColour.opacity(0.35)
+                        : clipColour
                 )
-                .padding(12)
+                .padding(.leading, 12)
+                .padding(.trailing, 8)
+                .padding(.vertical, 8)
                 .allowsHitTesting(false)
 
-                // Slot number and state as overlay at top-left
+                // Slot number and state overlay
                 VStack {
-                    HStack {
+                    HStack(spacing: 6) {
                         Text("\(slot.id + 1)")
-                            .font(.system(size: 20, weight: .bold, design: .rounded))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(.black.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+                            .font(.system(size: 16, weight: .bold, design: .monospaced))
+                            .foregroundStyle(accentColour)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Theme.background.opacity(0.7), in: RoundedRectangle(cornerRadius: 3))
                         Text(stateLabel)
-                            .font(.caption.weight(.semibold))
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(Theme.textSecondary)
                         Spacer()
                     }
-                    .padding(12)
+                    .padding(.leading, 12)
+                    .padding(.top, 8)
                     Spacer()
                 }
             } else {
-                // Empty/recording state: large centred content
-                VStack(spacing: 12) {
+                // Empty/recording state: centred content
+                VStack(spacing: 8) {
                     Text("\(slot.id + 1)")
-                        .font(.system(size: 48, weight: .bold, design: .rounded))
+                        .font(.system(size: 40, weight: .bold, design: .monospaced))
+                        .foregroundStyle(accentColour)
 
                     Text(stateLabel)
-                        .font(.title3.weight(.semibold))
+                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(Theme.textSecondary)
 
                     if slot.state == .armed || slot.state == .recording {
                         Circle()
-                            .fill(.white)
-                            .frame(width: 12, height: 12)
+                            .fill(accentColour)
+                            .frame(width: 10, height: 10)
                             .modifier(PulseAnimation())
                     }
                 }
+                .frame(maxWidth: .infinity)
             }
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(Theme.textPrimary)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.slotRadius))
         .overlay(
-            RoundedRectangle(cornerRadius: 20)
-                .stroke(isSelected ? .white : .clear, lineWidth: 4)
+            RoundedRectangle(cornerRadius: Theme.slotRadius)
+                .stroke(
+                    isSelected ? accentColour.opacity(0.8) : Theme.panelLight.opacity(0.5),
+                    lineWidth: isSelected ? 2 : 1
+                )
         )
     }
 
@@ -118,16 +154,6 @@ struct SlotView: View {
         case .recording: "REC"
         case .playing: "PLAY"
         case .muted: "MUTED"
-        }
-    }
-
-    private var backgroundColour: Color {
-        switch slot.state {
-        case .empty: .gray.opacity(0.25)
-        case .armed: .red.opacity(0.4)
-        case .recording: .red
-        case .playing: .green.opacity(0.75)
-        case .muted: .orange.opacity(0.5)
         }
     }
 }

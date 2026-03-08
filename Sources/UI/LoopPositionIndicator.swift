@@ -6,17 +6,17 @@ struct LoopPositionIndicator: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(.white.opacity(0.1))
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(Theme.panelLight)
 
                 if let master = session.masterLoopDuration, master > 0 {
                     let fraction = min(session.loopPosition / master, 1.0)
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(.blue)
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Theme.slotColours[0])
                         .frame(width: geometry.size.width * CGFloat(fraction))
                 }
             }
         }
-        .frame(height: 12)
+        .frame(height: 8)
     }
 }

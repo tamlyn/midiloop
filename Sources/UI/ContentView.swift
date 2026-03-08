@@ -8,41 +8,18 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Top bar: connection status + settings
-            HStack {
+            // Top bar: connection status + actions + settings
+            HStack(spacing: 12) {
                 ConnectionStatusBar()
+
                 Spacer()
-                Button {
-                    showingSettings = true
-                } label: {
-                    Image(systemName: "gearshape.fill")
-                        .font(.title2)
-                        .foregroundStyle(.secondary)
-                        .padding(12)
-                }
-            }
-            .padding(.horizontal)
-            .padding(.top, 8)
 
-            // Loop position
-            LoopPositionIndicator()
-                .padding(.horizontal)
-                .padding(.vertical, 12)
-
-            // Slot grid — takes up all available space
-            SlotGrid()
-                .padding(.horizontal)
-
-            Spacer(minLength: 16)
-
-            // Bottom actions
-            HStack(spacing: 16) {
                 Button {
                     engine?.sendAllNotesOff()
                 } label: {
                     Label("Panic", systemImage: "exclamationmark.triangle.fill")
                 }
-                .buttonStyle(ActionButtonStyle(colour: .red))
+                .buttonStyle(ActionButtonStyle(colour: Theme.recording))
 
                 Button {
                     engine?.sendAllNotesOff()
@@ -50,11 +27,28 @@ struct ContentView: View {
                 } label: {
                     Label("Clear All", systemImage: "trash")
                 }
-                .buttonStyle(ActionButtonStyle(colour: .gray))
+                .buttonStyle(ActionButtonStyle(colour: Theme.panelLight))
+
+                Button {
+                    showingSettings = true
+                } label: {
+                    Image(systemName: "gearshape.fill")
+                        .font(.title3)
+                        .foregroundStyle(Theme.textSecondary)
+                        .padding(8)
+                }
             }
             .padding(.horizontal)
-            .padding(.bottom, 16)
+            .padding(.top, 8)
+
+            // Slot grid — takes up all available space
+            SlotGrid()
+                .padding(.horizontal)
+                .padding(.top, 12)
+
+            Spacer(minLength: 16)
         }
+        .background(Theme.background)
         .preferredColorScheme(.dark)
         .sheet(isPresented: $showingSettings) {
             SettingsView()
@@ -67,10 +61,13 @@ struct ActionButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.headline)
-            .foregroundStyle(.white)
-            .padding(.horizontal, 24)
-            .padding(.vertical, 14)
-            .background(colour.opacity(configuration.isPressed ? 0.6 : 1.0), in: RoundedRectangle(cornerRadius: 12))
+            .font(.system(.subheadline, weight: .semibold))
+            .foregroundStyle(Theme.textPrimary)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(
+                colour.opacity(configuration.isPressed ? 0.6 : 1.0),
+                in: RoundedRectangle(cornerRadius: Theme.buttonRadius)
+            )
     }
 }

@@ -5,7 +5,8 @@ struct NoteRollView: View {
     let noteBars: [NoteBar]
     let duration: TimeInterval
     let playbackPosition: TimeInterval
-    let isPlaying: Bool
+    let showPlayhead: Bool
+    var noteColour: Color = Theme.slotColours[0]
 
     var body: some View {
         GeometryReader { geometry in
@@ -23,18 +24,18 @@ struct NoteRollView: View {
                     let pitchOffset = CGFloat(Int(noteRange.max) - Int(bar.note) + 1)
                     let y = pitchOffset * barHeight
 
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(.white.opacity(0.8))
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(noteColour.opacity(0.7))
                         .frame(width: width, height: max(barHeight - 1, 2))
                         .offset(x: x, y: y)
                 }
 
                 // Playhead
-                if isPlaying && duration > 0 {
+                if showPlayhead && duration > 0 {
                     let headX = xPosition(playbackPosition, in: geometry.size.width)
                     Rectangle()
-                        .fill(.white)
-                        .frame(width: 2)
+                        .fill(Theme.textPrimary.opacity(0.6))
+                        .frame(width: 1.5)
                         .offset(x: headX)
                 }
             }

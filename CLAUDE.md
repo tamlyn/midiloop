@@ -36,8 +36,8 @@ project.yml    xcodegen project spec
 - **MIDIService** — wraps MIDIKit's `ObservableMIDIManager`. Handles device connections, pass-through (on the MIDI thread for low latency), and event routing. Must use `legacyCoreMIDI` API because BLE MIDI only supports MIDI 1.0.
 - **LoopEngine** — `@MainActor`. Coordinates recording, playback (via `CADisplayLink`), and pedal control. Receives MIDI events from MIDIService via `Task { @MainActor in }` dispatch.
 - **Session** — observable model holding 4 `Slot`s, master loop duration, and loop position.
-- **Slot** — state machine: `empty → recording → playing ⇄ muted`. Tracks active notes for stuck note prevention.
-- **PedalController** — recognises quick/double/long press gestures from soft pedal CC messages.
+- **Slot** — state machine: `empty → armed → recording → playing ⇄ muted`. Tracks active notes for stuck note prevention. Precomputes `noteBars` for piano roll visualisation on recording stop.
+- **PedalController** — emits raw pedal events (down/up/quickPress/longPress). LoopEngine interprets them based on slot state: hold-to-record on empty slots, quick press to toggle mute, long press to clear.
 
 ## Key decisions
 
@@ -45,3 +45,11 @@ project.yml    xcodegen project spec
 - **Pass-through on MIDI thread**: Pass-through echoes events in `MIDIService.handleIncoming()` directly, avoiding main actor dispatch latency. Recording/pedal processing dispatches to main actor.
 - **CADisplayLink for playback**: Fires on every screen refresh (~120Hz on iPad Pro). Walks each slot's event list and sends events whose timestamps have been reached.
 - **No external dependencies** beyond MIDIKit.
+
+## Swift 6 concurrency patterns
+
+- `MIDIService` is `@unchecked Sendable` (accessed from MIDI thread and main actor).
+- `LoopEngine` and `PedalController` are `@MainActor`.
+- Timer closures use `MainActor.assumeIsolated` (timers fire on main run loop).
+- MIDIKit uses `UInt7`/`UInt4` types — convert with `UInt8(value)` at boundaries.
+- SourceKit diagnostics lag behind actual build state — trust `xcodebuild` output.
