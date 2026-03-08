@@ -39,6 +39,11 @@ final class Slot: Identifiable {
         events.append(event)
     }
 
+    func quantiseEvents(loopDuration: TimeInterval, grid: NoteQuantisation) {
+        guard state == .recording else { return }
+        events = NoteQuantiser.quantise(events: events, loopDuration: loopDuration, grid: grid)
+    }
+
     func stopRecording(duration: TimeInterval) {
         guard state == .recording else { return }
         self.duration = duration

@@ -112,15 +112,21 @@ final class LoopEngine {
 
         let rawDuration = CACurrentMediaTime() - startTime
 
+        let finalDuration: TimeInterval
         if session.masterLoopDuration == nil {
             session.setMasterLoopDuration(rawDuration)
-            slot.stopRecording(duration: rawDuration)
+            finalDuration = rawDuration
             playbackStartTime = startTime
         } else {
-            let quantised = session.quantisedDuration(for: rawDuration)
-            slot.stopRecording(duration: quantised)
+            finalDuration = session.quantisedDuration(for: rawDuration)
         }
 
+        // Apply note quantisation if enabled
+        if session.noteQuantisation != .off, let master = session.masterLoopDuration {
+            slot.quantiseEvents(loopDuration: master, grid: session.noteQuantisation)
+        }
+
+        slot.stopRecording(duration: finalDuration)
         slotPlaybackIndices[slot.id] = 0
     }
 

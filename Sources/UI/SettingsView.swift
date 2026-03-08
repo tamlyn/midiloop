@@ -3,13 +3,24 @@ import CoreAudioKit
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(Session.self) private var session
     @Environment(LoopEngine.self) private var engine: LoopEngine?
 
     var body: some View {
         NavigationStack {
+            @Bindable var session = session
             Form {
                 Section("Bluetooth MIDI") {
                     BluetoothMIDIButton()
+                }
+
+                Section("Quantisation") {
+                    Picker("Note Snap", selection: $session.noteQuantisation) {
+                        ForEach(NoteQuantisation.allCases) { q in
+                            Text(q.label).tag(q)
+                        }
+                    }
+                    .pickerStyle(.segmented)
                 }
 
                 if let engine {

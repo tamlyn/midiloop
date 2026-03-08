@@ -4,7 +4,9 @@
       "Bash(xcodegen:*)",
       "Bash(git commit:*)",
       "Bash(security find-certificate:*)",
-      "Bash(xcrun devicectl:*)"
+      "Bash(xcrun devicectl:*)",
+      "Bash(convert:*)",
+      "Bash(magick:*)"
     ]
   }
 }

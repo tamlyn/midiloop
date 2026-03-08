@@ -1,11 +1,33 @@
 import Foundation
 
+/// Subdivisions of the master loop for note quantisation.
+enum NoteQuantisation: Int, CaseIterable, Identifiable {
+    case off = 0
+    case quarter = 4
+    case eighth = 8
+    case sixteenth = 16
+    case thirtySecond = 32
+
+    var id: Int { rawValue }
+
+    var label: String {
+        switch self {
+        case .off: "Off"
+        case .quarter: "1/4"
+        case .eighth: "1/8"
+        case .sixteenth: "1/16"
+        case .thirtySecond: "1/32"
+        }
+    }
+}
+
 @Observable
 final class Session {
     let slots: [Slot] = (0..<4).map { Slot(id: $0) }
     private(set) var selectedSlotIndex: Int = 0
     private(set) var masterLoopDuration: TimeInterval?
     private(set) var loopPosition: TimeInterval = 0
+    var noteQuantisation: NoteQuantisation = .off
 
     var selectedSlot: Slot { slots[selectedSlotIndex] }
 
