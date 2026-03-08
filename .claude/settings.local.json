@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(xcodegen:*)"
+      "Bash(xcodegen:*)",
+      "Bash(git commit:*)",
+      "Bash(security find-certificate:*)",
+      "Bash(xcrun devicectl:*)"
     ]
   }
 }

@@ -28,6 +28,9 @@ final class MIDIService: @unchecked Sendable {
             manufacturer: "Tamlyn"
         )
 
+        // BLE MIDI only supports MIDI 1.0
+        midi.preferredAPI = .legacyCoreMIDI
+
         do {
             try midi.start()
         } catch {
@@ -66,7 +69,6 @@ final class MIDIService: @unchecked Sendable {
     }
 
     private func handleIncoming(_ event: MIDIEvent) {
-        // Pass-through: echo to output, except for consumed CCs
         if passThrough {
             let shouldPassThrough: Bool
             if case .cc(let payload) = event {
@@ -79,7 +81,6 @@ final class MIDIService: @unchecked Sendable {
             }
         }
 
-        // Forward to engine for recording/pedal processing
         onMIDIEvent?(event)
     }
 
@@ -89,9 +90,7 @@ final class MIDIService: @unchecked Sendable {
         }
         do {
             try connection.send(event: event)
-        } catch {
-            // Don't spam the console on every failed send
-        }
+        } catch {}
     }
 
     func send(events: [MIDIEvent]) {
