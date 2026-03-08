@@ -12,8 +12,11 @@ enum PedalGesture {
 /// Long press: held beyond the long-press threshold.
 @MainActor @Observable
 final class PedalController {
-    var controlChangeNumber: UInt8 = 67
+    var controlChangeNumber: UInt8 = 67 {
+        didSet { onCCNumberChanged?(controlChangeNumber) }
+    }
     var onGesture: ((PedalGesture) -> Void)?
+    var onCCNumberChanged: ((_ cc: UInt8) -> Void)?
 
     private let longPressThreshold: TimeInterval = 0.5
     private let doublePressWindow: TimeInterval = 0.35

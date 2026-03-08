@@ -5,26 +5,22 @@ struct ConnectionStatusBar: View {
     @Environment(ObservableMIDIManager.self) private var midiManager
 
     var body: some View {
-        HStack {
+        HStack(spacing: 8) {
             let outputCount = midiManager.endpoints.outputs.count
-            Image(systemName: outputCount > 0 ? "pianokeys" : "pianokeys.inverse")
-                .foregroundStyle(outputCount > 0 ? .green : .secondary)
+            Circle()
+                .fill(outputCount > 0 ? .green : .red)
+                .frame(width: 10, height: 10)
 
             if outputCount > 0 {
                 let names = midiManager.endpoints.outputs.map(\.name).joined(separator: ", ")
                 Text(names)
                     .font(.subheadline)
+                    .lineLimit(1)
             } else {
-                Text("No MIDI device connected")
+                Text("No MIDI device")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-
-            Spacer()
         }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
-        .padding(.horizontal)
     }
 }

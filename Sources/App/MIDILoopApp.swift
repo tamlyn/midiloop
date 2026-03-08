@@ -3,6 +3,7 @@ import MIDIKitIO
 
 @main
 struct MIDILoopApp: App {
+    @Environment(\.scenePhase) private var scenePhase
     @State private var session = Session()
     @State private var midiService = MIDIService()
     @State private var loopEngine: LoopEngine?
@@ -19,6 +20,11 @@ struct MIDILoopApp: App {
                         loopEngine = LoopEngine(session: session, midiService: midiService)
                     }
                 }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .background || newPhase == .inactive {
+                loopEngine?.sendAllNotesOff()
+            }
         }
     }
 }

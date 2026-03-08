@@ -5,20 +5,33 @@ struct SlotGrid: View {
     @Environment(LoopEngine.self) private var engine: LoopEngine?
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-            ForEach(session.slots) { slot in
-                SlotView(slot: slot, isSelected: slot.id == session.selectedSlotIndex)
-                    .onTapGesture {
-                        handleTap(slot)
-                    }
+        Grid(horizontalSpacing: 16, verticalSpacing: 16) {
+            GridRow {
+                slotButton(session.slots[0])
+                slotButton(session.slots[1])
+            }
+            GridRow {
+                slotButton(session.slots[2])
+                slotButton(session.slots[3])
             }
         }
-        .padding(.horizontal)
+    }
+
+    @ViewBuilder
+    private func slotButton(_ slot: Slot) -> some View {
+        let isSelected = slot.id == session.selectedSlotIndex
+        SlotView(slot: slot, isSelected: isSelected)
+            .contentShape(RoundedRectangle(cornerRadius: 20))
+            .onTapGesture {
+                handleTap(slot)
+            }
+            .onLongPressGesture {
+                engine?.clearSlot(slot)
+            }
     }
 
     private func handleTap(_ slot: Slot) {
-        let index = slot.id
-        if index == session.selectedSlotIndex {
+        if slot.id == session.selectedSlotIndex {
             switch slot.state {
             case .empty, .recording:
                 engine?.toggleRecording()
@@ -26,7 +39,7 @@ struct SlotGrid: View {
                 engine?.toggleMute()
             }
         } else {
-            session.selectSlot(index)
+            session.selectSlot(slot.id)
         }
     }
 }
@@ -36,36 +49,56 @@ struct SlotView: View {
     let isSelected: Bool
 
     var body: some View {
-        VStack(spacing: 8) {
-            Text("Slot \(slot.id + 1)")
-                .font(.title2.bold())
+        VStack(spacing: 12) {
+            Text("\(slot.id + 1)")
+                .font(.system(size: 48, weight: .bold, design: .rounded))
 
             Text(stateLabel)
-                .font(.headline)
+                .font(.title3.weight(.semibold))
+
+            if slot.state == .recording {
+                // Pulsing indicator
+                Circle()
+                    .fill(.white)
+                    .frame(width: 12, height: 12)
+                    .modifier(PulseAnimation())
+            }
         }
-        .frame(maxWidth: .infinity, minHeight: 120)
-        .background(backgroundColour, in: RoundedRectangle(cornerRadius: 16))
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(backgroundColour, in: RoundedRectangle(cornerRadius: 20))
         .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(isSelected ? .white : .clear, lineWidth: 3)
+            RoundedRectangle(cornerRadius: 20)
+                .stroke(isSelected ? .white : .clear, lineWidth: 4)
         )
     }
 
     private var stateLabel: String {
         switch slot.state {
-        case .empty: "Empty"
-        case .recording: "Recording"
-        case .playing: "Playing"
-        case .muted: "Muted"
+        case .empty: "EMPTY"
+        case .recording: "REC"
+        case .playing: "PLAY"
+        case .muted: "MUTED"
         }
     }
 
     private var backgroundColour: Color {
         switch slot.state {
-        case .empty: .gray.opacity(0.3)
-        case .recording: .red.opacity(0.7)
-        case .playing: .green.opacity(0.7)
+        case .empty: .gray.opacity(0.25)
+        case .recording: .red
+        case .playing: .green.opacity(0.75)
         case .muted: .orange.opacity(0.5)
         }
+    }
+}
+
+struct PulseAnimation: ViewModifier {
+    @State private var isPulsing = false
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(isPulsing ? 0.3 : 1.0)
+            .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: isPulsing)
+            .onAppear { isPulsing = true }
     }
 }

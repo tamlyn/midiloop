@@ -34,6 +34,10 @@ final class LoopEngine {
             self?.handlePedalGesture(gesture)
         }
 
+        pedalController.onCCNumberChanged = { [weak midiService] cc in
+            midiService?.consumedCCs = [cc]
+        }
+
         startPlaybackLoop()
     }
 
@@ -173,6 +177,9 @@ final class LoopEngine {
         let masterPosition = elapsed.truncatingRemainder(dividingBy: masterDuration)
         session.updateLoopPosition(masterPosition)
 
+        // Auto-stop recording at quantisation boundary
+        checkAutoStopRecording(now: now, masterDuration: masterDuration)
+
         for slot in session.slots {
             guard slot.state == .playing, !slot.events.isEmpty else { continue }
 
@@ -214,6 +221,32 @@ final class LoopEngine {
             slot.trackNoteOff(note: payload.note.number, channel: payload.channel)
         default:
             break
+        }
+    }
+
+    // MARK: - Auto-Stop Recording
+
+    /// For subsequent recordings (when master loop exists), auto-stop when
+    /// the recording duration crosses the nearest quantisation boundary.
+    /// The boundary is the nearest multiple of the master loop duration.
+    private func checkAutoStopRecording(now: CFTimeInterval, masterDuration: TimeInterval) {
+        let slot = session.selectedSlot
+        guard slot.state == .recording, let startTime = recordingStartTime else { return }
+
+        let elapsed = now - startTime
+
+        // Don't auto-stop until at least half a master loop has passed,
+        // to avoid triggering on very short recordings.
+        guard elapsed > masterDuration * 0.5 else { return }
+
+        // Find which multiple boundary we're nearest to
+        let nearestMultiple = round(elapsed / masterDuration)
+        let boundary = nearestMultiple * masterDuration
+
+        // Auto-stop if we've crossed the boundary (with a small tolerance)
+        let tolerance = masterDuration * 0.05
+        if elapsed >= boundary - tolerance {
+            stopRecording(slot)
         }
     }
 
