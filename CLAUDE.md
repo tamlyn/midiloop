@@ -28,6 +28,14 @@ xcodebuild test -project MIDILoop.xcodeproj -scheme MIDILoop -destination 'platf
 
 Uses Swift Testing (`import Testing`), not XCTest. Tests need `@MainActor` for `@Observable` types.
 
+## Development process
+
+- Always run tests and code quality checks before completing a feature.
+  - Don't ignore pre-existing test failures: stash, fix tests, then continue.
+- When fixing a bug, always write a test to avoid regressions.
+- Commit regularly when the app is in a usable state.
+- If an iOS device is connected, install each new build on it automatically.
+
 ## Architecture
 
 ```

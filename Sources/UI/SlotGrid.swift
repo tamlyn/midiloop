@@ -84,7 +84,7 @@ struct SlotView: View {
                 // Piano roll fills the tile
                 NoteRollView(
                     noteBars: slot.noteBars,
-                    duration: slot.duration,
+                    duration: slot.displayDuration,
                     playbackPosition: slot.playbackPosition,
                     showPlayhead: slot.state == .playing || slot.state == .muted,
                     noteColour: slot.state == .muted
@@ -108,6 +108,12 @@ struct SlotView: View {
                         Text(stateLabel)
                             .font(.system(size: 10, weight: .semibold, design: .monospaced))
                             .foregroundStyle(Theme.textSecondary)
+                        if slot.state == .recording {
+                            Circle()
+                                .fill(Theme.recording)
+                                .frame(width: 8, height: 8)
+                                .modifier(PulseAnimation())
+                        }
                         Spacer()
                     }
                     .padding(.leading, 12)

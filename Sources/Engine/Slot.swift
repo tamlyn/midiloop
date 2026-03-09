@@ -30,6 +30,15 @@ final class Slot: Identifiable {
     private(set) var duration: TimeInterval = 0
     private(set) var noteBars: [NoteBar] = []
 
+    /// Duration suitable for display: uses the latest event timestamp while
+    /// recording (before the final duration is known), otherwise the real duration.
+    var displayDuration: TimeInterval {
+        if state == .recording, let last = events.last {
+            return last.timestamp
+        }
+        return duration
+    }
+
     /// Current position within this slot's loop cycle, updated by the engine.
     var playbackPosition: TimeInterval = 0
 
@@ -57,6 +66,9 @@ final class Slot: Identifiable {
     func addEvent(_ event: RecordedEvent) {
         guard state == .recording else { return }
         events.append(event)
+        // Rebuild bars so the piano roll updates live during recording.
+        // Open notes close at the current timestamp.
+        noteBars = Self.buildNoteBars(from: events, duration: event.timestamp)
     }
 
     func quantiseEvents(loopDuration: TimeInterval, grid: NoteQuantisation) {
