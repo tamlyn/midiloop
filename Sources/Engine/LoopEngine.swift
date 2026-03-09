@@ -159,8 +159,8 @@ final class LoopEngine {
             finalDuration = session.quantisedDuration(for: rawDuration)
         }
 
-        if session.noteQuantisation != .off, let master = session.masterLoopDuration {
-            slot.quantiseEvents(loopDuration: master, grid: session.noteQuantisation)
+        if session.noteQuantisation != .off {
+            slot.quantiseEvents(loopDuration: finalDuration, grid: session.noteQuantisation)
         }
 
         slot.stopRecording(duration: finalDuration)
