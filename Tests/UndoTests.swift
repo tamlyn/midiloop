@@ -60,7 +60,7 @@ struct UndoTests {
     @Test func undoClearSlotRestoresContent() {
         let session = Session()
         let midi = MIDIService()
-        let engine = LoopEngine(session: session, midiService: midi)
+        let engine = LoopEngine(session: session, midiService: midi, pedalController: PedalController())
         defer { engine.stop() }
 
         recordClip(engine: engine, session: session, slotIndex: 0, events: [
@@ -84,7 +84,7 @@ struct UndoTests {
     @Test func undoClearLastSlotRestoresMasterLoopDuration() {
         let session = Session()
         let midi = MIDIService()
-        let engine = LoopEngine(session: session, midiService: midi)
+        let engine = LoopEngine(session: session, midiService: midi, pedalController: PedalController())
         defer { engine.stop() }
 
         recordClip(engine: engine, session: session, slotIndex: 0, events: [
@@ -105,7 +105,7 @@ struct UndoTests {
     @Test func undoClearAndAdvanceRestoresSelectedSlot() {
         let session = Session()
         let midi = MIDIService()
-        let engine = LoopEngine(session: session, midiService: midi)
+        let engine = LoopEngine(session: session, midiService: midi, pedalController: PedalController())
         defer { engine.stop() }
 
         recordClip(engine: engine, session: session, slotIndex: 0, events: [
@@ -129,7 +129,7 @@ struct UndoTests {
     @Test func undoMergeRestoresBothSlots() {
         let session = Session()
         let midi = MIDIService()
-        let engine = LoopEngine(session: session, midiService: midi)
+        let engine = LoopEngine(session: session, midiService: midi, pedalController: PedalController())
         defer { engine.stop() }
 
         recordClip(engine: engine, session: session, slotIndex: 0, events: [
@@ -161,7 +161,7 @@ struct UndoTests {
     @Test func undoRecordingRestoresEmptySlot() {
         let session = Session()
         let midi = MIDIService()
-        let engine = LoopEngine(session: session, midiService: midi)
+        let engine = LoopEngine(session: session, midiService: midi, pedalController: PedalController())
         defer { engine.stop() }
 
         // Capture the empty snapshot before recording
@@ -176,7 +176,7 @@ struct UndoTests {
         engine.commitPendingRecordingUndo()
 
         #expect(slot.state == .playing)
-        #expect(!engine.undoStack.isEmpty)
+        #expect(engine.canUndo)
 
         engine.undo()
         #expect(slot.state == .empty)
@@ -189,18 +189,18 @@ struct UndoTests {
     @Test func undoWhenEmptyIsNoOp() {
         let session = Session()
         let midi = MIDIService()
-        let engine = LoopEngine(session: session, midiService: midi)
+        let engine = LoopEngine(session: session, midiService: midi, pedalController: PedalController())
         defer { engine.stop() }
 
-        #expect(engine.undoStack.isEmpty)
+        #expect(!engine.canUndo)
         engine.undo()
-        #expect(engine.undoStack.isEmpty)
+        #expect(!engine.canUndo)
     }
 
     @Test func clearAllClearsUndoStack() {
         let session = Session()
         let midi = MIDIService()
-        let engine = LoopEngine(session: session, midiService: midi)
+        let engine = LoopEngine(session: session, midiService: midi, pedalController: PedalController())
         defer { engine.stop() }
 
         recordClip(engine: engine, session: session, slotIndex: 0, events: [
@@ -208,16 +208,16 @@ struct UndoTests {
         ], rawDuration: 1.0)
 
         engine.clearSlot(session.slots[0])
-        #expect(!engine.undoStack.isEmpty)
+        #expect(engine.canUndo)
 
         engine.clearAll()
-        #expect(engine.undoStack.isEmpty)
+        #expect(!engine.canUndo)
     }
 
     @Test func undoStackRespectsMaxDepth() {
         let session = Session()
         let midi = MIDIService()
-        let engine = LoopEngine(session: session, midiService: midi)
+        let engine = LoopEngine(session: session, midiService: midi, pedalController: PedalController())
         defer { engine.stop() }
 
         // Record a clip so we have something to clear repeatedly
@@ -236,6 +236,6 @@ struct UndoTests {
             ], rawDuration: 1.0)
         }
 
-        #expect(engine.undoStack.count <= 10)
+        #expect(engine.undoCount <= 10)
     }
 }

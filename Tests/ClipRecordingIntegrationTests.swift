@@ -70,7 +70,7 @@ struct ClipRecordingIntegrationTests {
     @Test func firstClipSetsCorrectDurationAndNoteBars() {
         let session = Session()
         let midiService = MIDIService()
-        let engine = LoopEngine(session: session, midiService: midiService)
+        let engine = LoopEngine(session: session, midiService: midiService, pedalController: PedalController())
         defer { engine.stop() }
 
         let events: [RecordedEvent] = [
@@ -87,15 +87,16 @@ struct ClipRecordingIntegrationTests {
         #expect(slot.duration == 4.0)
         #expect(session.masterLoopDuration == 4.0)
         #expect(slot.events.count == 4)
-        #expect(slot.noteBars.count == 2)
+        let noteBars = NoteBarBuilder.buildNoteBars(from: slot.events, duration: slot.duration)
+        #expect(noteBars.count == 2)
 
         // First note: C4 from 0.0 to 0.5
-        let bar0 = slot.noteBars.first { $0.note == 60 }!
+        let bar0 = noteBars.first { $0.note == 60 }!
         #expect(bar0.startTime == 0.0)
         #expect(bar0.endTime == 0.5)
 
         // Second note: E4 from 1.0 to 1.5
-        let bar1 = slot.noteBars.first { $0.note == 64 }!
+        let bar1 = noteBars.first { $0.note == 64 }!
         #expect(bar1.startTime == 1.0)
         #expect(bar1.endTime == 1.5)
     }
@@ -105,7 +106,7 @@ struct ClipRecordingIntegrationTests {
     @Test func secondClipShorterThanMasterSnapsTo1x() {
         let session = Session()
         let midiService = MIDIService()
-        let engine = LoopEngine(session: session, midiService: midiService)
+        let engine = LoopEngine(session: session, midiService: midiService, pedalController: PedalController())
         defer { engine.stop() }
 
         // First clip: 4s master
@@ -123,9 +124,10 @@ struct ClipRecordingIntegrationTests {
         let slot1 = session.slots[1]
         #expect(slot1.state == .playing)
         #expect(slot1.duration == 4.0)
-        #expect(slot1.noteBars.count == 1)
+        let noteBars1 = NoteBarBuilder.buildNoteBars(from: slot1.events, duration: slot1.duration)
+        #expect(noteBars1.count == 1)
 
-        let bar = slot1.noteBars[0]
+        let bar = noteBars1[0]
         #expect(bar.note == 72)
         #expect(bar.startTime == 0.0)
         #expect(bar.endTime == 1.0)
@@ -136,7 +138,7 @@ struct ClipRecordingIntegrationTests {
     @Test func secondClipLongerThanMasterQuantisesTo2x() {
         let session = Session()
         let midiService = MIDIService()
-        let engine = LoopEngine(session: session, midiService: midiService)
+        let engine = LoopEngine(session: session, midiService: midiService, pedalController: PedalController())
         defer { engine.stop() }
 
         // First clip: 4s master
@@ -159,20 +161,21 @@ struct ClipRecordingIntegrationTests {
         let slot1 = session.slots[1]
         #expect(slot1.state == .playing)
         #expect(slot1.duration == 8.0)
-        #expect(slot1.noteBars.count == 3)
+        let noteBars1 = NoteBarBuilder.buildNoteBars(from: slot1.events, duration: slot1.duration)
+        #expect(noteBars1.count == 3)
 
         // Note in first half: preserved
-        let barC = slot1.noteBars.first { $0.note == 60 }!
+        let barC = noteBars1.first { $0.note == 60 }!
         #expect(barC.startTime == 0.0)
         #expect(barC.endTime == 1.0)
 
         // Note in second half: must NOT be clamped to master boundary
-        let barE = slot1.noteBars.first { $0.note == 64 }!
+        let barE = noteBars1.first { $0.note == 64 }!
         #expect(barE.startTime == 4.5)
         #expect(barE.endTime == 5.5)
 
         // Note near end
-        let barG = slot1.noteBars.first { $0.note == 67 }!
+        let barG = noteBars1.first { $0.note == 67 }!
         #expect(barG.startTime == 6.0)
         #expect(barG.endTime == 7.5)
     }
@@ -183,7 +186,7 @@ struct ClipRecordingIntegrationTests {
         let session = Session()
         session.noteQuantisation = .quarter
         let midiService = MIDIService()
-        let engine = LoopEngine(session: session, midiService: midiService)
+        let engine = LoopEngine(session: session, midiService: midiService, pedalController: PedalController())
         defer { engine.stop() }
 
         // First clip: 4s master
@@ -204,16 +207,17 @@ struct ClipRecordingIntegrationTests {
         let slot1 = session.slots[1]
         #expect(slot1.state == .playing)
         #expect(slot1.duration == 8.0)
-        #expect(slot1.noteBars.count == 2)
+        let noteBars1 = NoteBarBuilder.buildNoteBars(from: slot1.events, duration: slot1.duration)
+        #expect(noteBars1.count == 2)
 
         // Note in first half: quantised to grid, duration preserved
-        let barC = slot1.noteBars.first { $0.note == 60 }!
+        let barC = noteBars1.first { $0.note == 60 }!
         #expect(barC.startTime >= 0.0)
         #expect(barC.endTime > barC.startTime)
         #expect(barC.endTime <= 2.0) // reasonable upper bound
 
         // Note in second half: must survive past master boundary (4.0)
-        let barE = slot1.noteBars.first { $0.note == 64 }!
+        let barE = noteBars1.first { $0.note == 64 }!
         #expect(barE.startTime > 4.0, "Note-on in second half should be past master boundary")
         #expect(barE.endTime > 4.0, "Note-off in second half must NOT be clamped to master duration")
         #expect(barE.endTime > barE.startTime, "Note must have positive duration")
@@ -225,7 +229,7 @@ struct ClipRecordingIntegrationTests {
     @Test func unclosedNotesInLongerClipCloseAtSlotDuration() {
         let session = Session()
         let midiService = MIDIService()
-        let engine = LoopEngine(session: session, midiService: midiService)
+        let engine = LoopEngine(session: session, midiService: midiService, pedalController: PedalController())
         defer { engine.stop() }
 
         // First clip: 4s master
@@ -244,14 +248,15 @@ struct ClipRecordingIntegrationTests {
 
         let slot1 = session.slots[1]
         #expect(slot1.duration == 8.0)
-        #expect(slot1.noteBars.count == 2)
+        let noteBars1 = NoteBarBuilder.buildNoteBars(from: slot1.events, duration: slot1.duration)
+        #expect(noteBars1.count == 2)
 
         // Closed note: normal
-        let barC = slot1.noteBars.first { $0.note == 60 }!
+        let barC = noteBars1.first { $0.note == 60 }!
         #expect(barC.endTime == 2.0)
 
         // Unclosed note: should close at slot duration (8.0), not master (4.0)
-        let barE = slot1.noteBars.first { $0.note == 64 }!
+        let barE = noteBars1.first { $0.note == 64 }!
         #expect(barE.startTime == 5.0)
         #expect(barE.endTime == 8.0, "Unclosed note should close at slot duration, not master duration")
     }
@@ -261,7 +266,7 @@ struct ClipRecordingIntegrationTests {
     @Test func eventTimestampsPreservedInLongerClip() {
         let session = Session()
         let midiService = MIDIService()
-        let engine = LoopEngine(session: session, midiService: midiService)
+        let engine = LoopEngine(session: session, midiService: midiService, pedalController: PedalController())
         defer { engine.stop() }
 
         // First clip: 4s master
@@ -293,7 +298,8 @@ struct ClipRecordingIntegrationTests {
         }
 
         // All note bars should be within bounds
-        for bar in slot1.noteBars {
+        let noteBars1 = NoteBarBuilder.buildNoteBars(from: slot1.events, duration: slot1.duration)
+        for bar in noteBars1 {
             #expect(bar.startTime >= 0)
             #expect(bar.endTime <= slot1.duration)
             #expect(bar.endTime > bar.startTime, "Note bar must have positive duration")
@@ -305,7 +311,7 @@ struct ClipRecordingIntegrationTests {
     @Test func playbackOffsetCorrectForLongerSecondClip() {
         let session = Session()
         let midiService = MIDIService()
-        let engine = LoopEngine(session: session, midiService: midiService)
+        let engine = LoopEngine(session: session, midiService: midiService, pedalController: PedalController())
         defer { engine.stop() }
 
         // Simulate first clip already recorded
@@ -345,7 +351,7 @@ struct ClipRecordingIntegrationTests {
         let session = Session()
         session.noteQuantisation = .quarter
         let midiService = MIDIService()
-        let engine = LoopEngine(session: session, midiService: midiService)
+        let engine = LoopEngine(session: session, midiService: midiService, pedalController: PedalController())
         defer { engine.stop() }
 
         // Set up a 4s master loop
@@ -387,7 +393,7 @@ struct ClipRecordingIntegrationTests {
         let session = Session()
         session.noteQuantisation = .quarter
         let midiService = MIDIService()
-        let engine = LoopEngine(session: session, midiService: midiService)
+        let engine = LoopEngine(session: session, midiService: midiService, pedalController: PedalController())
         defer { engine.stop() }
 
         session.setMasterLoopDuration(4.0)
@@ -419,7 +425,7 @@ struct ClipRecordingIntegrationTests {
         let session = Session()
         session.noteQuantisation = .off
         let midiService = MIDIService()
-        let engine = LoopEngine(session: session, midiService: midiService)
+        let engine = LoopEngine(session: session, midiService: midiService, pedalController: PedalController())
         defer { engine.stop() }
 
         session.setMasterLoopDuration(4.0)
@@ -458,7 +464,7 @@ struct ClipRecordingIntegrationTests {
     @Test func preRollBufferClearedAfterTransition() {
         let session = Session()
         let midiService = MIDIService()
-        let engine = LoopEngine(session: session, midiService: midiService)
+        let engine = LoopEngine(session: session, midiService: midiService, pedalController: PedalController())
         defer { engine.stop() }
 
         session.setMasterLoopDuration(4.0)

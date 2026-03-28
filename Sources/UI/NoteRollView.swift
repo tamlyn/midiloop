@@ -23,7 +23,7 @@ struct NoteRollView: View {
                     let width = max(2, xPosition(bar.endTime, in: geometry.size.width) - x)
                     let pitchOffset = CGFloat(Int(noteRange.max) - Int(bar.note) + 1)
                     let y = pitchOffset * barHeight
-                    let colour = Theme.takeColour(index: bar.colourIndex)
+                    let colour = Theme.takeColour(index: bar.takeIndex)
 
                     RoundedRectangle(cornerRadius: 1)
                         .fill(colour.opacity(dimmed ? 0.25 : 0.7))

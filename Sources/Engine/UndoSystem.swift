@@ -5,7 +5,6 @@ struct SlotSnapshot {
     let state: SlotState
     let events: [RecordedEvent]
     let duration: TimeInterval
-    let noteBars: [NoteBar]
 }
 
 struct UndoEntry {

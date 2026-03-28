@@ -3,28 +3,13 @@ import MIDIKitIO
 
 struct RecordedEvent {
     let timestamp: TimeInterval
-    let colourIndex: Int
+    let takeIndex: Int
     let event: MIDIEvent
 
-    init(timestamp: TimeInterval, colourIndex: Int = 0, event: MIDIEvent) {
+    init(timestamp: TimeInterval, takeIndex: Int = 0, event: MIDIEvent) {
         self.timestamp = timestamp
-        self.colourIndex = colourIndex
+        self.takeIndex = takeIndex
         self.event = event
-    }
-}
-
-/// A note rendered as a horizontal bar in the piano roll.
-struct NoteBar {
-    let note: UInt8
-    let startTime: TimeInterval
-    let endTime: TimeInterval
-    let colourIndex: Int
-
-    init(note: UInt8, startTime: TimeInterval, endTime: TimeInterval, colourIndex: Int = 0) {
-        self.note = note
-        self.startTime = startTime
-        self.endTime = endTime
-        self.colourIndex = colourIndex
     }
 }
 
@@ -43,19 +28,6 @@ final class Slot: Identifiable {
     private(set) var state: SlotState = .empty
     private(set) var events: [RecordedEvent] = []
     private(set) var duration: TimeInterval = 0
-    private(set) var noteBars: [NoteBar] = []
-
-    /// Duration suitable for display: uses the latest event timestamp while
-    /// recording (before the final duration is known), otherwise the real duration.
-    var displayDuration: TimeInterval {
-        if state == .recording, let last = events.last {
-            return last.timestamp
-        }
-        return duration
-    }
-
-    /// Current position within this slot's loop cycle, updated by the engine.
-    var playbackPosition: TimeInterval = 0
 
     /// Notes currently sounding from this slot's playback.
     private(set) var activeNotes: Set<NoteKey> = []
@@ -68,22 +40,17 @@ final class Slot: Identifiable {
         guard state == .empty else { return }
         state = .armed
         events = []
-        noteBars = []
     }
 
     func startRecording() {
         guard state == .empty || state == .armed else { return }
         state = .recording
         events = []
-        noteBars = []
     }
 
     func addEvent(_ event: RecordedEvent) {
         guard state == .recording else { return }
         events.append(event)
-        // Rebuild bars so the piano roll updates live during recording.
-        // Open notes close at the current timestamp.
-        noteBars = Self.buildNoteBars(from: events, duration: event.timestamp)
     }
 
     func quantiseEvents(loopDuration: TimeInterval, grid: NoteQuantisation) {
@@ -94,7 +61,6 @@ final class Slot: Identifiable {
     func stopRecording(duration: TimeInterval) {
         guard state == .recording else { return }
         self.duration = duration
-        noteBars = Self.buildNoteBars(from: events, duration: duration)
         state = .playing
     }
 
@@ -113,8 +79,6 @@ final class Slot: Identifiable {
         state = .empty
         events = []
         duration = 0
-        noteBars = []
-        playbackPosition = 0
         activeNotes = []
     }
 
@@ -135,8 +99,7 @@ final class Slot: Identifiable {
             slotId: id,
             state: state,
             events: events,
-            duration: duration,
-            noteBars: noteBars
+            duration: duration
         )
     }
 
@@ -144,20 +107,14 @@ final class Slot: Identifiable {
         state = snapshot.state
         events = snapshot.events
         duration = snapshot.duration
-        noteBars = snapshot.noteBars
-        playbackPosition = 0
         activeNotes = []
     }
-
-    // MARK: - Note bar computation
 
     /// Accepts events and state from another slot (for drag-to-move).
     func acceptTransfer(from source: Slot) {
         events = source.events
         duration = source.duration
-        noteBars = source.noteBars
         state = source.state == .muted ? .muted : .playing
-        playbackPosition = source.playbackPosition
     }
 
     /// Merges events from another slot into this one. The resulting duration
@@ -177,7 +134,6 @@ final class Slot: Identifiable {
         events.append(contentsOf: sourceEvents)
         events.sort { $0.timestamp < $1.timestamp }
         duration = targetDuration
-        noteBars = Self.buildNoteBars(from: events, duration: duration)
     }
 
     /// Repeats events to fill a longer duration.
@@ -196,7 +152,7 @@ final class Slot: Identifiable {
                 guard t < targetDuration else { continue }
                 result.append(RecordedEvent(
                     timestamp: t,
-                    colourIndex: event.colourIndex,
+                    takeIndex: event.takeIndex,
                     event: event.event
                 ))
             }
@@ -204,46 +160,6 @@ final class Slot: Identifiable {
         return result
     }
 
-    /// Pairs note-on/off events into bars for visualisation.
-    static func buildNoteBars(from events: [RecordedEvent], duration: TimeInterval) -> [NoteBar] {
-        // Track open notes: (note, channel) -> (start time, colourIndex)
-        var open: [NoteKey: (start: TimeInterval, colourIndex: Int)] = [:]
-        var bars: [NoteBar] = []
-
-        for recorded in events {
-            switch recorded.event {
-            case .noteOn(let payload):
-                let key = NoteKey(note: payload.note.number, channel: payload.channel)
-                open[key] = (start: recorded.timestamp, colourIndex: recorded.colourIndex)
-
-            case .noteOff(let payload):
-                let key = NoteKey(note: payload.note.number, channel: payload.channel)
-                if let info = open.removeValue(forKey: key) {
-                    bars.append(NoteBar(
-                        note: UInt8(payload.note.number),
-                        startTime: info.start,
-                        endTime: recorded.timestamp,
-                        colourIndex: info.colourIndex
-                    ))
-                }
-
-            default:
-                break
-            }
-        }
-
-        // Close any notes still open at the end of the loop
-        for (key, info) in open {
-            bars.append(NoteBar(
-                note: UInt8(key.note),
-                startTime: info.start,
-                endTime: duration,
-                colourIndex: info.colourIndex
-            ))
-        }
-
-        return bars
-    }
 }
 
 /// Identifies a sounding note for stuck note prevention.

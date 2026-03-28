@@ -51,12 +51,13 @@ project.yml    xcodegen project spec
 ```
 
 - **MIDIService** — wraps MIDIKit's `ObservableMIDIManager`. Handles device connections, pass-through (on the MIDI thread for low latency), and event routing.
-- **LoopEngine** — `@MainActor`. Coordinates recording, playback (via `CADisplayLink`), and pedal control. Receives MIDI events from MIDIService via `Task { @MainActor in }` dispatch.
+- **LoopEngine** — `@MainActor`. Coordinates recording, playback (via `CADisplayLink`), and pedal control. Receives MIDI events from MIDIService via `Task { @MainActor in }` dispatch. Owns playback positions and undo stack.
 - **UndoSystem** — `UndoEntry` snapshots on `LoopEngine`. Captures slot state before clear, merge, and recording operations. Max 10 entries. Clear All resets the stack.
-- **Session** — observable model holding 4 `Slot`s, master loop duration, and loop position.
-- **Slot** — state machine: `empty → armed → recording → playing ⇄ muted`. Tracks active notes for stuck note prevention. Precomputes `noteBars` for piano roll visualisation on recording stop. `RecordedEvent` and `NoteBar` carry a `colourIndex` so merged slots display multi-coloured notes.
+- **Session** — observable model holding 4 `Slot`s, master loop duration, and loop position. Manages take index allocation for multi-take colouring.
+- **Slot** — state machine: `empty → armed → recording → playing ⇄ muted`. Tracks active notes for stuck note prevention. Pure data model — no visualisation concerns.
+- **NoteBarBuilder** (UI layer) — derives `NoteBar` piano roll visualisation from slot events on demand. `RecordedEvent` carries a `takeIndex` so merged slots display multi-coloured notes.
 - **NoteQuantiser** — snaps loop length to power-of-2 multiples (1/2x, 1x, 2x, 4x).
-- **PedalController** — emits raw pedal events (down/up/quickPress/longPress). LoopEngine interprets them based on slot state: hold-to-record on empty slots, quick press to toggle mute, long press to clear.
+- **PedalController** — emits raw pedal events (down/up/quickPress/longPress). LoopEngine interprets them based on slot state: hold-to-record on empty slots, quick press to toggle mute, long press to clear. Created at the app level and injected into both LoopEngine and the SwiftUI environment.
 
 ## Key decisions
 
@@ -66,7 +67,8 @@ project.yml    xcodegen project spec
 - **No external dependencies** beyond MIDIKit.
 - **UI theme**: `Theme.swift` centralises colours, radii, and per-slot clip colours. FL Studio-inspired dark panel aesthetic.
 - **Slot gestures**: Single tap mutes/unmutes. Two-finger tap (UIKit bridge in `TwoFingerTapView`) selects or arms. Drag moves/merges/deletes slots.
-- **Undo**: Custom stack on LoopEngine (not SwiftUI UndoManager). Snapshots slot events/duration/state plus engine playback indices before destructive operations. Recording snapshots are captured at recording start, pushed at stop.
+- **Undo**: Custom stack on LoopEngine (not SwiftUI UndoManager). Snapshots slot events/duration/state plus engine playback indices before destructive operations. Recording snapshots are captured at recording start, pushed at stop. Stack is private; UI queries `canUndo`.
+- **Engine/UI separation**: Engine layer has zero UI imports. Visualisation data (`NoteBar`, playback positions, display duration) lives in the UI layer. `MIDIService`, `PedalController`, and `Session` are injected via SwiftUI environment independently of `LoopEngine`.
 
 ## Swift 6 concurrency patterns
 

@@ -20,7 +20,7 @@ struct ContentView: View {
                     Label("Undo", systemImage: "arrow.uturn.backward")
                 }
                 .buttonStyle(ActionButtonStyle(colour: Theme.panelLight))
-                .disabled(engine?.undoStack.isEmpty ?? true)
+                .disabled(!(engine?.canUndo ?? false))
 
                 Button {
                     engine?.sendAllNotesOff()

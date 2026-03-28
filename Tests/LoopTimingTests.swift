@@ -31,7 +31,6 @@ struct LoopTimingTests {
         let slot = Slot(id: 0)
         slot.arm()
         #expect(slot.events.isEmpty)
-        #expect(slot.noteBars.isEmpty)
     }
 
     // MARK: - Power-of-2 quantisation
@@ -123,7 +122,7 @@ struct LoopTimingTests {
     @Test func subsequentSlotPlaybackOffset() {
         let session = Session()
         let midiService = MIDIService()
-        let engine = LoopEngine(session: session, midiService: midiService)
+        let engine = LoopEngine(session: session, midiService: midiService, pedalController: PedalController())
         defer { engine.stop() }
 
         let masterDuration: TimeInterval = 4.0

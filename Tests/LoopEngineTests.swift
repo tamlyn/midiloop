@@ -60,7 +60,7 @@ struct LoopEngineTests {
     @Test func moveSlotTransfersContentToEmptyTarget() {
         let session = Session()
         let midi = MIDIService()
-        let engine = LoopEngine(session: session, midiService: midi)
+        let engine = LoopEngine(session: session, midiService: midi, pedalController: PedalController())
         defer { engine.stop() }
 
         recordClip(engine: engine, session: session, slotIndex: 0, events: [
@@ -82,7 +82,7 @@ struct LoopEngineTests {
     @Test func moveSlotTransfersPlaybackOffsets() {
         let session = Session()
         let midi = MIDIService()
-        let engine = LoopEngine(session: session, midiService: midi)
+        let engine = LoopEngine(session: session, midiService: midi, pedalController: PedalController())
         defer { engine.stop() }
 
         recordClip(engine: engine, session: session, slotIndex: 0, events: [
@@ -103,7 +103,7 @@ struct LoopEngineTests {
     @Test func moveSlotDoesNothingIfTargetNotEmpty() {
         let session = Session()
         let midi = MIDIService()
-        let engine = LoopEngine(session: session, midiService: midi)
+        let engine = LoopEngine(session: session, midiService: midi, pedalController: PedalController())
         defer { engine.stop() }
 
         recordClip(engine: engine, session: session, slotIndex: 0, events: [
@@ -129,7 +129,7 @@ struct LoopEngineTests {
     @Test func moveSlotPreservesMutedState() {
         let session = Session()
         let midi = MIDIService()
-        let engine = LoopEngine(session: session, midiService: midi)
+        let engine = LoopEngine(session: session, midiService: midi, pedalController: PedalController())
         defer { engine.stop() }
 
         recordClip(engine: engine, session: session, slotIndex: 0, events: [
@@ -151,7 +151,7 @@ struct LoopEngineTests {
     @Test func toggleMuteOnSpecificSlot() {
         let session = Session()
         let midi = MIDIService()
-        let engine = LoopEngine(session: session, midiService: midi)
+        let engine = LoopEngine(session: session, midiService: midi, pedalController: PedalController())
         defer { engine.stop() }
 
         recordClip(engine: engine, session: session, slotIndex: 1, events: [
@@ -173,7 +173,7 @@ struct LoopEngineTests {
     @Test func toggleMuteOnEmptySlotDoesNothing() {
         let session = Session()
         let midi = MIDIService()
-        let engine = LoopEngine(session: session, midiService: midi)
+        let engine = LoopEngine(session: session, midiService: midi, pedalController: PedalController())
         defer { engine.stop() }
 
         let slot = session.slots[0]
@@ -186,7 +186,7 @@ struct LoopEngineTests {
     @Test func clearSlotResetsToEmpty() {
         let session = Session()
         let midi = MIDIService()
-        let engine = LoopEngine(session: session, midiService: midi)
+        let engine = LoopEngine(session: session, midiService: midi, pedalController: PedalController())
         defer { engine.stop() }
 
         recordClip(engine: engine, session: session, slotIndex: 0, events: [
@@ -203,7 +203,7 @@ struct LoopEngineTests {
     @Test func clearLastSlotResetsMasterLoop() {
         let session = Session()
         let midi = MIDIService()
-        let engine = LoopEngine(session: session, midiService: midi)
+        let engine = LoopEngine(session: session, midiService: midi, pedalController: PedalController())
         defer { engine.stop() }
 
         recordClip(engine: engine, session: session, slotIndex: 0, events: [
@@ -221,19 +221,19 @@ struct LoopEngineTests {
     @Test func canUndoReflectsStackState() {
         let session = Session()
         let midi = MIDIService()
-        let engine = LoopEngine(session: session, midiService: midi)
+        let engine = LoopEngine(session: session, midiService: midi, pedalController: PedalController())
         defer { engine.stop() }
 
-        #expect(engine.undoStack.isEmpty)
+        #expect(!engine.canUndo)
 
         recordClip(engine: engine, session: session, slotIndex: 0, events: [
             noteOn(60, at: 0.0), noteOff(60, at: 0.5),
         ], rawDuration: 1.0)
 
         engine.clearSlot(session.slots[0])
-        #expect(!engine.undoStack.isEmpty)
+        #expect(engine.canUndo)
 
         engine.undo()
-        #expect(engine.undoStack.isEmpty)
+        #expect(!engine.canUndo)
     }
 }

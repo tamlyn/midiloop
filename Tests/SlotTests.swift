@@ -10,7 +10,6 @@ struct SlotTests {
         let slot = Slot(id: 0)
         #expect(slot.state == .empty)
         #expect(slot.events.isEmpty)
-        #expect(slot.noteBars.isEmpty)
         #expect(slot.duration == 0)
     }
 
@@ -97,14 +96,11 @@ struct SlotTests {
             event: .noteOn(MIDIEvent.NoteOn(note: 60, velocity: .midi1(100), channel: 0))
         ))
         slot.stopRecording(duration: 2.0)
-        slot.playbackPosition = 1.5
 
         slot.clear()
         #expect(slot.state == .empty)
         #expect(slot.events.isEmpty)
-        #expect(slot.noteBars.isEmpty)
         #expect(slot.duration == 0)
-        #expect(slot.playbackPosition == 0)
         #expect(slot.activeNotes.isEmpty)
     }
 
@@ -132,56 +128,42 @@ struct SlotTests {
     // MARK: - Note bar computation
 
     @Test func noteBarsPairedCorrectly() {
-        let slot = Slot(id: 0)
-        slot.startRecording()
+        let events = [
+            RecordedEvent(timestamp: 0.0, event: .noteOn(MIDIEvent.NoteOn(note: 60, velocity: .midi1(100), channel: 0))),
+            RecordedEvent(timestamp: 0.5, event: .noteOff(MIDIEvent.NoteOff(note: 60, velocity: .midi1(0), channel: 0))),
+        ]
 
-        slot.addEvent(RecordedEvent(
-            timestamp: 0.0,
-            event: .noteOn(MIDIEvent.NoteOn(note: 60, velocity: .midi1(100), channel: 0))
-        ))
-        slot.addEvent(RecordedEvent(
-            timestamp: 0.5,
-            event: .noteOff(MIDIEvent.NoteOff(note: 60, velocity: .midi1(0), channel: 0))
-        ))
+        let bars = NoteBarBuilder.buildNoteBars(from: events, duration: 1.0)
 
-        slot.stopRecording(duration: 1.0)
-
-        #expect(slot.noteBars.count == 1)
-        #expect(slot.noteBars[0].note == 60)
-        #expect(slot.noteBars[0].startTime == 0.0)
-        #expect(slot.noteBars[0].endTime == 0.5)
+        #expect(bars.count == 1)
+        #expect(bars[0].note == 60)
+        #expect(bars[0].startTime == 0.0)
+        #expect(bars[0].endTime == 0.5)
     }
 
     @Test func unclosedNoteClosesAtLoopEnd() {
-        let slot = Slot(id: 0)
-        slot.startRecording()
+        let events = [
+            RecordedEvent(timestamp: 0.8, event: .noteOn(MIDIEvent.NoteOn(note: 64, velocity: .midi1(80), channel: 0))),
+        ]
 
-        slot.addEvent(RecordedEvent(
-            timestamp: 0.8,
-            event: .noteOn(MIDIEvent.NoteOn(note: 64, velocity: .midi1(80), channel: 0))
-        ))
-        // No note-off
+        let bars = NoteBarBuilder.buildNoteBars(from: events, duration: 1.0)
 
-        slot.stopRecording(duration: 1.0)
-
-        #expect(slot.noteBars.count == 1)
-        #expect(slot.noteBars[0].startTime == 0.8)
-        #expect(slot.noteBars[0].endTime == 1.0)
+        #expect(bars.count == 1)
+        #expect(bars[0].startTime == 0.8)
+        #expect(bars[0].endTime == 1.0)
     }
 
     @Test func multipleNoteBars() {
-        let slot = Slot(id: 0)
-        slot.startRecording()
+        let events = [
+            RecordedEvent(timestamp: 0.0, event: .noteOn(MIDIEvent.NoteOn(note: 60, velocity: .midi1(100), channel: 0))),
+            RecordedEvent(timestamp: 0.3, event: .noteOff(MIDIEvent.NoteOff(note: 60, velocity: .midi1(0), channel: 0))),
+            RecordedEvent(timestamp: 0.5, event: .noteOn(MIDIEvent.NoteOn(note: 64, velocity: .midi1(90), channel: 0))),
+            RecordedEvent(timestamp: 0.8, event: .noteOff(MIDIEvent.NoteOff(note: 64, velocity: .midi1(0), channel: 0))),
+        ]
 
-        // Two notes, one after the other
-        slot.addEvent(RecordedEvent(timestamp: 0.0, event: .noteOn(MIDIEvent.NoteOn(note: 60, velocity: .midi1(100), channel: 0))))
-        slot.addEvent(RecordedEvent(timestamp: 0.3, event: .noteOff(MIDIEvent.NoteOff(note: 60, velocity: .midi1(0), channel: 0))))
-        slot.addEvent(RecordedEvent(timestamp: 0.5, event: .noteOn(MIDIEvent.NoteOn(note: 64, velocity: .midi1(90), channel: 0))))
-        slot.addEvent(RecordedEvent(timestamp: 0.8, event: .noteOff(MIDIEvent.NoteOff(note: 64, velocity: .midi1(0), channel: 0))))
+        let bars = NoteBarBuilder.buildNoteBars(from: events, duration: 1.0)
 
-        slot.stopRecording(duration: 1.0)
-
-        #expect(slot.noteBars.count == 2)
+        #expect(bars.count == 2)
     }
 
     // MARK: - Active note tracking
@@ -294,7 +276,7 @@ struct SlotTests {
         let events = [
             RecordedEvent(
                 timestamp: 0.0,
-                colourIndex: 3,
+                takeIndex: 3,
                 event: .noteOn(MIDIEvent.NoteOn(note: 60, velocity: .midi1(100), channel: 0))
             ),
         ]
@@ -302,8 +284,8 @@ struct SlotTests {
         let looped = Slot.loopEvents(events, originalDuration: 1.0, targetDuration: 2.0)
 
         #expect(looped.count == 2)
-        #expect(looped[0].colourIndex == 3)
-        #expect(looped[1].colourIndex == 3)
+        #expect(looped[0].takeIndex == 3)
+        #expect(looped[1].takeIndex == 3)
     }
 
     @Test func loopEventsWithZeroDurationReturnsOriginal() {

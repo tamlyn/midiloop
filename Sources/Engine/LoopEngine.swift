@@ -16,6 +16,7 @@ final class LoopEngine {
 
     private var slotPlaybackIndices: [Int] = [0, 0, 0, 0]
     var slotPlaybackOffsets: [TimeInterval] = [0, 0, 0, 0]
+    private(set) var slotPlaybackPositions: [TimeInterval] = [0, 0, 0, 0]
 
     /// Events received while a slot is armed, kept for pre-roll capture.
     var preRollBuffer: [(event: MIDIEvent, wallTime: CFTimeInterval)] = []
@@ -27,17 +28,19 @@ final class LoopEngine {
     private var suppressNextQuickPress = false
 
     /// Colour index for the current recording take.
-    private var recordingColourIndex: Int = 0
+    private var recordingTakeIndex: Int = 0
 
     /// Undo stack for reversible operations.
-    private(set) var undoStack: [UndoEntry] = []
+    private var undoStack: [UndoEntry] = []
+    var canUndo: Bool { !undoStack.isEmpty }
+    var undoCount: Int { undoStack.count }
     var pendingRecordingSnapshot: UndoEntry?
     private let maxUndoDepth = 10
 
-    init(session: Session, midiService: MIDIService) {
+    init(session: Session, midiService: MIDIService, pedalController: PedalController) {
         self.session = session
         self.midiService = midiService
-        self.pedalController = PedalController()
+        self.pedalController = pedalController
 
         midiService.consumedCCs = [pedalController.controlChangeNumber]
 
@@ -83,7 +86,7 @@ final class LoopEngine {
                 capturePendingRecordingSnapshot(for: selectedSlot)
                 selectedSlot.startRecording()
                 recordingStartTime = CACurrentMediaTime()
-                recordingColourIndex = session.claimNextColour()
+                recordingTakeIndex = session.claimNextTakeIndex()
             } else {
                 return
             }
@@ -100,7 +103,7 @@ final class LoopEngine {
         if selectedSlot.state == .recording {
             guard let startTime = recordingStartTime else { return }
             let timestamp = CACurrentMediaTime() - startTime
-            selectedSlot.addEvent(RecordedEvent(timestamp: timestamp, colourIndex: recordingColourIndex, event: event))
+            selectedSlot.addEvent(RecordedEvent(timestamp: timestamp, takeIndex: recordingTakeIndex, event: event))
         }
     }
 
@@ -207,9 +210,9 @@ final class LoopEngine {
             capturePendingRecordingSnapshot(for: slot)
             slot.startRecording()
             recordingStartTime = boundaryTime
-            recordingColourIndex = session.claimNextColour()
+            recordingTakeIndex = session.claimNextTakeIndex()
             for item in earlyMIDIEvents {
-                slot.addEvent(RecordedEvent(timestamp: 0.0, colourIndex: recordingColourIndex, event: item.event))
+                slot.addEvent(RecordedEvent(timestamp: 0.0, takeIndex: recordingTakeIndex, event: item.event))
             }
         }
         preRollBuffer.removeAll()
@@ -303,6 +306,7 @@ final class LoopEngine {
         session.clearAll()
         slotPlaybackIndices = [0, 0, 0, 0]
         slotPlaybackOffsets = [0, 0, 0, 0]
+        slotPlaybackPositions = [0, 0, 0, 0]
         undoStack.removeAll()
         pendingRecordingSnapshot = nil
     }
@@ -407,7 +411,7 @@ final class LoopEngine {
 
             let slotElapsed = elapsed - slotPlaybackOffsets[slot.id]
             let slotPosition = slotElapsed.truncatingRemainder(dividingBy: slot.duration)
-            slot.playbackPosition = slotPosition
+            slotPlaybackPositions[slot.id] = slotPosition
 
             guard slot.state == .playing, !slot.events.isEmpty else { continue }
             let index = slotPlaybackIndices[slot.id]

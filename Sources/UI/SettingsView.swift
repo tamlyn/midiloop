@@ -4,11 +4,14 @@ import CoreAudioKit
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(Session.self) private var session
-    @Environment(LoopEngine.self) private var engine: LoopEngine?
+    @Environment(MIDIService.self) private var midiService
+    @Environment(PedalController.self) private var pedalController
 
     var body: some View {
         NavigationStack {
             @Bindable var session = session
+            @Bindable var midi = midiService
+            @Bindable var pedal = pedalController
             Form {
                 Section("Bluetooth MIDI") {
                     BluetoothMIDIButton()
@@ -23,19 +26,15 @@ struct SettingsView: View {
                     .pickerStyle(.segmented)
                 }
 
-                if let engine {
-                    Section("MIDI") {
-                        @Bindable var midi = engine.midiService
-                        Toggle("Local Sound", isOn: $midi.passThrough)
-                    }
+                Section("MIDI") {
+                    Toggle("Local Sound", isOn: $midi.passThrough)
+                }
 
-                    Section("Pedal Control") {
-                        @Bindable var pedal = engine.pedalController
-                        Picker("Control Change", selection: $pedal.controlChangeNumber) {
-                            Text("CC#64 (Sustain)").tag(UInt8(64))
-                            Text("CC#66 (Sostenuto)").tag(UInt8(66))
-                            Text("CC#67 (Soft/Una Corda)").tag(UInt8(67))
-                        }
+                Section("Pedal Control") {
+                    Picker("Control Change", selection: $pedal.controlChangeNumber) {
+                        Text("CC#64 (Sustain)").tag(UInt8(64))
+                        Text("CC#66 (Sostenuto)").tag(UInt8(66))
+                        Text("CC#67 (Soft/Una Corda)").tag(UInt8(67))
                     }
                 }
             }

@@ -30,7 +30,7 @@ struct SlotGrid: View {
         let isDragging = draggedSlotId == slot.id
         let isDropTarget = draggedSlotId != nil && draggedSlotId != slot.id
 
-        SlotView(slot: slot, isSelected: isSelected, showNotes: !isDragging)
+        SlotView(slot: slot, isSelected: isSelected, playbackPosition: engine?.slotPlaybackPositions[slot.id] ?? 0, showNotes: !isDragging)
             .overlay {
                 if isDropTarget {
                     dropTargetOverlay(for: slot)
@@ -59,7 +59,7 @@ struct SlotGrid: View {
             .zIndex(isDragging ? 1 : 0)
             .overlay {
                 if isDragging {
-                    SlotView(slot: slot, isSelected: false, showLabel: false)
+                    SlotView(slot: slot, isSelected: false, playbackPosition: 0, showLabel: false)
                         .offset(dragOffset)
                         .allowsHitTesting(false)
                 }
@@ -152,11 +152,23 @@ private struct SlotFrameKey: PreferenceKey {
 struct SlotView: View {
     let slot: Slot
     let isSelected: Bool
+    var playbackPosition: TimeInterval = 0
     var showNotes: Bool = true
     var showLabel: Bool = true
 
+    private var noteBars: [NoteBar] {
+        NoteBarBuilder.buildNoteBars(from: slot.events, duration: displayDuration)
+    }
+
+    private var displayDuration: TimeInterval {
+        if slot.state == .recording, let last = slot.events.last {
+            return last.timestamp
+        }
+        return slot.duration
+    }
+
     private var hasNotes: Bool {
-        showNotes && !slot.noteBars.isEmpty
+        showNotes && !slot.events.isEmpty
     }
 
     private var accentColour: Color {
@@ -176,9 +188,9 @@ struct SlotView: View {
             if hasNotes {
                 // Piano roll fills the tile
                 NoteRollView(
-                    noteBars: slot.noteBars,
-                    duration: slot.displayDuration,
-                    playbackPosition: slot.playbackPosition,
+                    noteBars: noteBars,
+                    duration: displayDuration,
+                    playbackPosition: playbackPosition,
                     showPlayhead: slot.state == .playing || slot.state == .muted,
                     dimmed: slot.state == .muted
                 )

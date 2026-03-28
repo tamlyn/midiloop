@@ -27,7 +27,7 @@ enum NoteQuantiser {
                 activeDeltas[key] = delta
                 result.append(RecordedEvent(
                     timestamp: max(0, snapped),
-                    colourIndex: recorded.colourIndex,
+                    takeIndex: recorded.takeIndex,
                     event: recorded.event
                 ))
 
@@ -37,7 +37,7 @@ enum NoteQuantiser {
                 let adjusted = recorded.timestamp + delta
                 result.append(RecordedEvent(
                     timestamp: max(0, min(adjusted, loopDuration)),
-                    colourIndex: recorded.colourIndex,
+                    takeIndex: recorded.takeIndex,
                     event: recorded.event
                 ))
 
@@ -46,7 +46,7 @@ enum NoteQuantiser {
                 let snapped = snapToGrid(recorded.timestamp, gridInterval: gridInterval)
                 result.append(RecordedEvent(
                     timestamp: max(0, snapped),
-                    colourIndex: recorded.colourIndex,
+                    takeIndex: recorded.takeIndex,
                     event: recorded.event
                 ))
             }
