@@ -10,13 +10,8 @@ The app produces no audio of its own — it operates purely as a MIDI recorder a
 - **MIDI pass-through** — hear yourself playing in real time with imperceptible latency
 - **Loop quantisation** — first recording sets the master loop length; subsequent recordings snap to exact multiples
 - **Note quantisation** — optionally snap notes to a grid (1/4, 1/8, 1/16, 1/32) when recording stops
-- **Pre-roll capture** — notes played just before the loop boundary are included in the recording
-- **Pedal control** — use the soft pedal (or any configurable CC) for hands-free operation:
-  - Hold: arm and record on empty slot, release to stop
-  - Quick press: toggle mute
-  - Long press: clear slot and advance to next
+- **Pedal control** — use the soft pedal (or any configurable CC) for hands-free operation
 - **USB and Bluetooth MIDI** — connect to any CoreMIDI-compatible device
-- **Stuck note prevention** — tracks all sounding notes and sends Note Off on mute, clear, loop restart, and app background
 - **Live performance UI** — large touch targets readable at arm's length, dark theme
 
 ## Requirements

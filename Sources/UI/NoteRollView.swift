@@ -6,7 +6,7 @@ struct NoteRollView: View {
     let duration: TimeInterval
     let playbackPosition: TimeInterval
     let showPlayhead: Bool
-    var noteColour: Color = Theme.slotColours[0]
+    var dimmed: Bool = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -23,9 +23,10 @@ struct NoteRollView: View {
                     let width = max(2, xPosition(bar.endTime, in: geometry.size.width) - x)
                     let pitchOffset = CGFloat(Int(noteRange.max) - Int(bar.note) + 1)
                     let y = pitchOffset * barHeight
+                    let colour = Theme.takeColour(index: bar.colourIndex)
 
                     RoundedRectangle(cornerRadius: 1)
-                        .fill(noteColour.opacity(0.7))
+                        .fill(colour.opacity(dimmed ? 0.25 : 0.7))
                         .frame(width: width, height: max(barHeight - 1, 2))
                         .offset(x: x, y: y)
                 }

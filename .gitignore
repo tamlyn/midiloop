@@ -14,6 +14,8 @@ DerivedData/
 .build/
 .swiftpm/
 
+build/
+
 # IDE
 .idea/
 

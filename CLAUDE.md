@@ -53,7 +53,7 @@ project.yml    xcodegen project spec
 - **MIDIService** — wraps MIDIKit's `ObservableMIDIManager`. Handles device connections, pass-through (on the MIDI thread for low latency), and event routing.
 - **LoopEngine** — `@MainActor`. Coordinates recording, playback (via `CADisplayLink`), and pedal control. Receives MIDI events from MIDIService via `Task { @MainActor in }` dispatch.
 - **Session** — observable model holding 4 `Slot`s, master loop duration, and loop position.
-- **Slot** — state machine: `empty → armed → recording → playing ⇄ muted`. Tracks active notes for stuck note prevention. Precomputes `noteBars` for piano roll visualisation on recording stop.
+- **Slot** — state machine: `empty → armed → recording → playing ⇄ muted`. Tracks active notes for stuck note prevention. Precomputes `noteBars` for piano roll visualisation on recording stop. `RecordedEvent` and `NoteBar` carry a `colourIndex` so merged slots display multi-coloured notes.
 - **NoteQuantiser** — snaps loop length to power-of-2 multiples (1/2x, 1x, 2x, 4x).
 - **PedalController** — emits raw pedal events (down/up/quickPress/longPress). LoopEngine interprets them based on slot state: hold-to-record on empty slots, quick press to toggle mute, long press to clear.
 
@@ -64,6 +64,7 @@ project.yml    xcodegen project spec
 - **CADisplayLink for playback**: Fires on every screen refresh (~120Hz on iPad Pro). Walks each slot's event list and sends events whose timestamps have been reached.
 - **No external dependencies** beyond MIDIKit.
 - **UI theme**: `Theme.swift` centralises colours, radii, and per-slot clip colours. FL Studio-inspired dark panel aesthetic.
+- **Slot gestures**: Single tap mutes/unmutes. Two-finger tap (UIKit bridge in `TwoFingerTapView`) selects or arms. Drag moves/merges/deletes slots.
 
 ## Swift 6 concurrency patterns
 
@@ -72,7 +73,8 @@ project.yml    xcodegen project spec
 - Timer closures use `MainActor.assumeIsolated` (timers fire on main run loop).
 - MIDIKit uses `UInt7`/`UInt4` types — convert with `UInt8(value)` at boundaries.
 - SourceKit diagnostics lag behind actual build state — trust `xcodebuild` output.
+- `PreferenceKey` requires `nonisolated(unsafe)` on its `static var defaultValue` for Swift 6.
 
 ## Gotchas
 
-- **File/class name mismatch**: `Sources/MIDI/MIDIManager.swift` contains the class `MIDIService`, not `MIDIManager`.
+- **Sandbox**: `xcodebuild` commands fail in sandbox mode due to Swift package cache permissions. Always run unsandboxed.

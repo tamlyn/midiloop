@@ -8,7 +8,7 @@ struct ConnectionStatusBar: View {
         HStack(spacing: 8) {
             let outputCount = midiManager.endpoints.outputs.count
             Circle()
-                .fill(outputCount > 0 ? Theme.slotColours[0] : Theme.recording)
+                .fill(outputCount > 0 ? Theme.takeColours[0] : Theme.recording)
                 .frame(width: 8, height: 8)
 
             if outputCount > 0 {

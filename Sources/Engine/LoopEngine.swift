@@ -26,6 +26,9 @@ final class LoopEngine {
     /// Set when recording stops, to prevent quickPress from toggling mute.
     private var suppressNextQuickPress = false
 
+    /// Colour index for the current recording take.
+    private var recordingColourIndex: Int = 0
+
     init(session: Session, midiService: MIDIService) {
         self.session = session
         self.midiService = midiService
@@ -74,6 +77,7 @@ final class LoopEngine {
             if case .noteOn = event {
                 selectedSlot.startRecording()
                 recordingStartTime = CACurrentMediaTime()
+                recordingColourIndex = session.claimNextColour()
             } else {
                 return
             }
@@ -90,7 +94,7 @@ final class LoopEngine {
         if selectedSlot.state == .recording {
             guard let startTime = recordingStartTime else { return }
             let timestamp = CACurrentMediaTime() - startTime
-            selectedSlot.addEvent(RecordedEvent(timestamp: timestamp, event: event))
+            selectedSlot.addEvent(RecordedEvent(timestamp: timestamp, colourIndex: recordingColourIndex, event: event))
         }
     }
 
@@ -186,15 +190,15 @@ final class LoopEngine {
     func transitionArmedSlots(boundaryTime: CFTimeInterval) {
         let preRollWindow = computePreRollWindow()
         let cutoff = boundaryTime - preRollWindow
-        let earlyEvents = preRollBuffer
+        let earlyMIDIEvents = preRollBuffer
             .filter { $0.wallTime >= cutoff && $0.wallTime < boundaryTime }
-            .map { RecordedEvent(timestamp: 0.0, event: $0.event) }
 
         for slot in session.slots where slot.state == .armed {
             slot.startRecording()
             recordingStartTime = boundaryTime
-            for event in earlyEvents {
-                slot.addEvent(event)
+            recordingColourIndex = session.claimNextColour()
+            for item in earlyMIDIEvents {
+                slot.addEvent(RecordedEvent(timestamp: 0.0, colourIndex: recordingColourIndex, event: item.event))
             }
         }
         preRollBuffer.removeAll()
@@ -220,6 +224,49 @@ final class LoopEngine {
         } else if slot.state == .muted {
             slot.toggleMute()
         }
+    }
+
+    /// Toggle mute on a specific slot (for tap gesture on any slot).
+    func toggleMute(slot: Slot) {
+        if slot.state == .playing {
+            midiService.sendNoteOffs(for: slot.activeNotes)
+            slot.clearActiveNotes()
+            slot.toggleMute()
+        } else if slot.state == .muted {
+            slot.toggleMute()
+        }
+    }
+
+    // MARK: - Move & Merge
+
+    /// Move a slot's content to an empty target slot.
+    func moveSlot(from source: Slot, to target: Slot) {
+        guard target.state == .empty else { return }
+        midiService.sendNoteOffs(for: source.activeNotes)
+        source.clearActiveNotes()
+
+        target.acceptTransfer(from: source)
+        slotPlaybackOffsets[target.id] = slotPlaybackOffsets[source.id]
+        slotPlaybackIndices[target.id] = slotPlaybackIndices[source.id]
+
+        source.clear()
+        slotPlaybackOffsets[source.id] = 0
+        slotPlaybackIndices[source.id] = 0
+    }
+
+    /// Merge a slot's events into another non-empty slot.
+    func mergeSlot(source: Slot, into target: Slot) {
+        midiService.sendNoteOffs(for: source.activeNotes)
+        source.clearActiveNotes()
+
+        target.mergeEvents(from: source)
+
+        source.clear()
+        slotPlaybackOffsets[source.id] = 0
+        slotPlaybackIndices[source.id] = 0
+
+        // Reset target playback index so merged events play correctly
+        slotPlaybackIndices[target.id] = 0
     }
 
     // MARK: - Clear

@@ -27,6 +27,7 @@ final class Session {
     private(set) var selectedSlotIndex: Int = 0
     private(set) var masterLoopDuration: TimeInterval?
     private(set) var loopPosition: TimeInterval = 0
+    private var nextColourIndex: Int = 0
     var noteQuantisation: NoteQuantisation = .off {
         didSet { UserDefaults.standard.set(noteQuantisation.rawValue, forKey: "noteQuantisation") }
     }
@@ -79,6 +80,13 @@ final class Session {
     /// Returns true if all slots are empty (master loop should be reset).
     var allSlotsEmpty: Bool {
         slots.allSatisfy { $0.state == .empty }
+    }
+
+    /// Claims the next take colour index (round-robin through the palette).
+    func claimNextColour() -> Int {
+        let index = nextColourIndex
+        nextColourIndex += 1
+        return index
     }
 
     func updateLoopPosition(_ position: TimeInterval) {

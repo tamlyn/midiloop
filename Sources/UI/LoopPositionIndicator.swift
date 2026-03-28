@@ -12,7 +12,7 @@ struct LoopPositionIndicator: View {
                 if let master = session.masterLoopDuration, master > 0 {
                     let fraction = min(session.loopPosition / master, 1.0)
                     RoundedRectangle(cornerRadius: 3, style: .continuous)
-                        .fill(Theme.slotColours[0])
+                        .fill(Theme.takeColours[0])
                         .frame(width: geometry.size.width * CGFloat(fraction))
                 }
             }

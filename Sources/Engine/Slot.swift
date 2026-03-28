@@ -3,7 +3,14 @@ import MIDIKitIO
 
 struct RecordedEvent {
     let timestamp: TimeInterval
+    let colourIndex: Int
     let event: MIDIEvent
+
+    init(timestamp: TimeInterval, colourIndex: Int = 0, event: MIDIEvent) {
+        self.timestamp = timestamp
+        self.colourIndex = colourIndex
+        self.event = event
+    }
 }
 
 /// A note rendered as a horizontal bar in the piano roll.
@@ -11,6 +18,14 @@ struct NoteBar {
     let note: UInt8
     let startTime: TimeInterval
     let endTime: TimeInterval
+    let colourIndex: Int
+
+    init(note: UInt8, startTime: TimeInterval, endTime: TimeInterval, colourIndex: Int = 0) {
+        self.note = note
+        self.startTime = startTime
+        self.endTime = endTime
+        self.colourIndex = colourIndex
+    }
 }
 
 enum SlotState {
@@ -117,25 +132,79 @@ final class Slot: Identifiable {
 
     // MARK: - Note bar computation
 
+    /// Accepts events and state from another slot (for drag-to-move).
+    func acceptTransfer(from source: Slot) {
+        events = source.events
+        duration = source.duration
+        noteBars = source.noteBars
+        state = source.state == .muted ? .muted : .playing
+        playbackPosition = source.playbackPosition
+    }
+
+    /// Merges events from another slot into this one. The resulting duration
+    /// is the longer of the two; the shorter clip's events are looped to fill.
+    func mergeEvents(from source: Slot) {
+        guard duration > 0, source.duration > 0 else { return }
+        let targetDuration = max(duration, source.duration)
+
+        // Loop this slot's own events if the source is longer
+        if source.duration > duration {
+            events = Self.loopEvents(events, originalDuration: duration, targetDuration: targetDuration)
+        }
+
+        // Loop source events to fill the target duration
+        let sourceEvents = Self.loopEvents(source.events, originalDuration: source.duration, targetDuration: targetDuration)
+
+        events.append(contentsOf: sourceEvents)
+        events.sort { $0.timestamp < $1.timestamp }
+        duration = targetDuration
+        noteBars = Self.buildNoteBars(from: events, duration: duration)
+    }
+
+    /// Repeats events to fill a longer duration.
+    static func loopEvents(
+        _ events: [RecordedEvent],
+        originalDuration: TimeInterval,
+        targetDuration: TimeInterval
+    ) -> [RecordedEvent] {
+        guard originalDuration > 0 else { return events }
+        let repetitions = Int(ceil(targetDuration / originalDuration))
+        var result: [RecordedEvent] = []
+        for i in 0..<repetitions {
+            let offset = Double(i) * originalDuration
+            for event in events {
+                let t = event.timestamp + offset
+                guard t < targetDuration else { continue }
+                result.append(RecordedEvent(
+                    timestamp: t,
+                    colourIndex: event.colourIndex,
+                    event: event.event
+                ))
+            }
+        }
+        return result
+    }
+
     /// Pairs note-on/off events into bars for visualisation.
-    private static func buildNoteBars(from events: [RecordedEvent], duration: TimeInterval) -> [NoteBar] {
-        // Track open notes: (note, channel) -> start time
-        var open: [NoteKey: TimeInterval] = [:]
+    static func buildNoteBars(from events: [RecordedEvent], duration: TimeInterval) -> [NoteBar] {
+        // Track open notes: (note, channel) -> (start time, colourIndex)
+        var open: [NoteKey: (start: TimeInterval, colourIndex: Int)] = [:]
         var bars: [NoteBar] = []
 
         for recorded in events {
             switch recorded.event {
             case .noteOn(let payload):
                 let key = NoteKey(note: payload.note.number, channel: payload.channel)
-                open[key] = recorded.timestamp
+                open[key] = (start: recorded.timestamp, colourIndex: recorded.colourIndex)
 
             case .noteOff(let payload):
                 let key = NoteKey(note: payload.note.number, channel: payload.channel)
-                if let start = open.removeValue(forKey: key) {
+                if let info = open.removeValue(forKey: key) {
                     bars.append(NoteBar(
                         note: UInt8(payload.note.number),
-                        startTime: start,
-                        endTime: recorded.timestamp
+                        startTime: info.start,
+                        endTime: recorded.timestamp,
+                        colourIndex: info.colourIndex
                     ))
                 }
 
@@ -145,11 +214,12 @@ final class Slot: Identifiable {
         }
 
         // Close any notes still open at the end of the loop
-        for (key, start) in open {
+        for (key, info) in open {
             bars.append(NoteBar(
                 note: UInt8(key.note),
-                startTime: start,
-                endTime: duration
+                startTime: info.start,
+                endTime: duration,
+                colourIndex: info.colourIndex
             ))
         }
 
