@@ -115,4 +115,27 @@ struct SessionTests {
         session.slots[1].startRecording()
         #expect(!session.allSlotsEmpty)
     }
+
+    // MARK: - Take index (colour) round-robin
+
+    @Test func claimNextColourIncrementsRoundRobin() {
+        let session = Session()
+        let first = session.claimNextColour()
+        let second = session.claimNextColour()
+        let third = session.claimNextColour()
+        #expect(first == 0)
+        #expect(second == 1)
+        #expect(third == 2)
+    }
+
+    @Test func clearAllDoesNotResetColourIndex() {
+        let session = Session()
+        _ = session.claimNextColour()
+        _ = session.claimNextColour()
+        session.clearAll()
+        // Colour index is not reset by clearAll — each take stays unique
+        // (The UI wraps via modulo, so the raw index can grow indefinitely)
+        let next = session.claimNextColour()
+        #expect(next == 2)
+    }
 }

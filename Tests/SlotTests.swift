@@ -202,4 +202,250 @@ struct SlotTests {
         slot.clearActiveNotes()
         #expect(slot.activeNotes.isEmpty)
     }
+
+    // MARK: - Accept transfer (drag-to-move)
+
+    @Test func acceptTransferCopiesStateFromSource() {
+        let source = Slot(id: 0)
+        source.startRecording()
+        source.addEvent(RecordedEvent(
+            timestamp: 0.0,
+            event: .noteOn(MIDIEvent.NoteOn(note: 60, velocity: .midi1(100), channel: 0))
+        ))
+        source.addEvent(RecordedEvent(
+            timestamp: 0.5,
+            event: .noteOff(MIDIEvent.NoteOff(note: 60, velocity: .midi1(0), channel: 0))
+        ))
+        source.stopRecording(duration: 1.0)
+
+        let target = Slot(id: 1)
+        target.acceptTransfer(from: source)
+
+        #expect(target.events.count == 2)
+        #expect(target.duration == 1.0)
+        #expect(target.state == .playing)
+    }
+
+    @Test func acceptTransferFromMutedSlotStaysMuted() {
+        let source = Slot(id: 0)
+        source.startRecording()
+        source.addEvent(RecordedEvent(
+            timestamp: 0.0,
+            event: .noteOn(MIDIEvent.NoteOn(note: 60, velocity: .midi1(100), channel: 0))
+        ))
+        source.stopRecording(duration: 1.0)
+        source.toggleMute()
+        #expect(source.state == .muted)
+
+        let target = Slot(id: 1)
+        target.acceptTransfer(from: source)
+
+        #expect(target.state == .muted)
+        #expect(target.events.count == 1)
+        #expect(target.duration == 1.0)
+    }
+
+    // MARK: - Loop events
+
+    @Test func loopEventsRepeatsToFillDuration() {
+        let events = [
+            RecordedEvent(
+                timestamp: 0.0,
+                event: .noteOn(MIDIEvent.NoteOn(note: 60, velocity: .midi1(100), channel: 0))
+            ),
+            RecordedEvent(
+                timestamp: 0.5,
+                event: .noteOff(MIDIEvent.NoteOff(note: 60, velocity: .midi1(0), channel: 0))
+            ),
+        ]
+
+        let looped = Slot.loopEvents(events, originalDuration: 1.0, targetDuration: 3.0)
+
+        // 3 repetitions: 0-1s, 1-2s, 2-3s
+        #expect(looped.count == 6)
+        #expect(looped[0].timestamp == 0.0)
+        #expect(looped[1].timestamp == 0.5)
+        #expect(looped[2].timestamp == 1.0)
+        #expect(looped[3].timestamp == 1.5)
+        #expect(looped[4].timestamp == 2.0)
+        #expect(looped[5].timestamp == 2.5)
+    }
+
+    @Test func loopEventsExcludesEventsAtOrPastTarget() {
+        let events = [
+            RecordedEvent(
+                timestamp: 0.0,
+                event: .noteOn(MIDIEvent.NoteOn(note: 60, velocity: .midi1(100), channel: 0))
+            ),
+            RecordedEvent(
+                timestamp: 0.9,
+                event: .noteOff(MIDIEvent.NoteOff(note: 60, velocity: .midi1(0), channel: 0))
+            ),
+        ]
+
+        let looped = Slot.loopEvents(events, originalDuration: 1.0, targetDuration: 1.5)
+
+        // Rep 0: 0.0, 0.9; Rep 1: 1.0 (ok), 1.9 (>=1.5, excluded)
+        #expect(looped.count == 3)
+        #expect(looped[2].timestamp == 1.0)
+    }
+
+    @Test func loopEventsPreservesTakeIndex() {
+        let events = [
+            RecordedEvent(
+                timestamp: 0.0,
+                colourIndex: 3,
+                event: .noteOn(MIDIEvent.NoteOn(note: 60, velocity: .midi1(100), channel: 0))
+            ),
+        ]
+
+        let looped = Slot.loopEvents(events, originalDuration: 1.0, targetDuration: 2.0)
+
+        #expect(looped.count == 2)
+        #expect(looped[0].colourIndex == 3)
+        #expect(looped[1].colourIndex == 3)
+    }
+
+    @Test func loopEventsWithZeroDurationReturnsOriginal() {
+        let events = [
+            RecordedEvent(
+                timestamp: 0.0,
+                event: .noteOn(MIDIEvent.NoteOn(note: 60, velocity: .midi1(100), channel: 0))
+            ),
+        ]
+
+        let looped = Slot.loopEvents(events, originalDuration: 0.0, targetDuration: 2.0)
+        #expect(looped.count == 1)
+    }
+
+    // MARK: - Merge events
+
+    @Test func mergeEventsCombinesTwoSlots() {
+        let slot1 = Slot(id: 0)
+        slot1.startRecording()
+        slot1.addEvent(RecordedEvent(
+            timestamp: 0.0,
+            event: .noteOn(MIDIEvent.NoteOn(note: 60, velocity: .midi1(100), channel: 0))
+        ))
+        slot1.addEvent(RecordedEvent(
+            timestamp: 0.5,
+            event: .noteOff(MIDIEvent.NoteOff(note: 60, velocity: .midi1(0), channel: 0))
+        ))
+        slot1.stopRecording(duration: 1.0)
+
+        let slot2 = Slot(id: 1)
+        slot2.startRecording()
+        slot2.addEvent(RecordedEvent(
+            timestamp: 0.2,
+            event: .noteOn(MIDIEvent.NoteOn(note: 64, velocity: .midi1(100), channel: 0))
+        ))
+        slot2.addEvent(RecordedEvent(
+            timestamp: 0.7,
+            event: .noteOff(MIDIEvent.NoteOff(note: 64, velocity: .midi1(0), channel: 0))
+        ))
+        slot2.stopRecording(duration: 1.0)
+
+        slot1.mergeEvents(from: slot2)
+
+        #expect(slot1.events.count == 4)
+        #expect(slot1.duration == 1.0)
+        // Events should be sorted by timestamp
+        for i in 1..<slot1.events.count {
+            #expect(slot1.events[i].timestamp >= slot1.events[i - 1].timestamp)
+        }
+    }
+
+    @Test func mergeEventsLoopsShorterSlot() {
+        let long = Slot(id: 0)
+        long.startRecording()
+        long.addEvent(RecordedEvent(
+            timestamp: 0.0,
+            event: .noteOn(MIDIEvent.NoteOn(note: 60, velocity: .midi1(100), channel: 0))
+        ))
+        long.addEvent(RecordedEvent(
+            timestamp: 1.5,
+            event: .noteOff(MIDIEvent.NoteOff(note: 60, velocity: .midi1(0), channel: 0))
+        ))
+        long.stopRecording(duration: 2.0)
+
+        let short = Slot(id: 1)
+        short.startRecording()
+        short.addEvent(RecordedEvent(
+            timestamp: 0.0,
+            event: .noteOn(MIDIEvent.NoteOn(note: 64, velocity: .midi1(100), channel: 0))
+        ))
+        short.addEvent(RecordedEvent(
+            timestamp: 0.5,
+            event: .noteOff(MIDIEvent.NoteOff(note: 64, velocity: .midi1(0), channel: 0))
+        ))
+        short.stopRecording(duration: 1.0)
+
+        long.mergeEvents(from: short)
+
+        #expect(long.duration == 2.0)
+        // Long had 2 events, short looped to 2.0s = 2 reps of 2 events = 4, total = 6
+        #expect(long.events.count == 6)
+    }
+
+    @Test func mergeEventsExpandsShorterTarget() {
+        let short = Slot(id: 0)
+        short.startRecording()
+        short.addEvent(RecordedEvent(
+            timestamp: 0.0,
+            event: .noteOn(MIDIEvent.NoteOn(note: 60, velocity: .midi1(100), channel: 0))
+        ))
+        short.addEvent(RecordedEvent(
+            timestamp: 0.5,
+            event: .noteOff(MIDIEvent.NoteOff(note: 60, velocity: .midi1(0), channel: 0))
+        ))
+        short.stopRecording(duration: 1.0)
+
+        let long = Slot(id: 1)
+        long.startRecording()
+        long.addEvent(RecordedEvent(
+            timestamp: 0.0,
+            event: .noteOn(MIDIEvent.NoteOn(note: 64, velocity: .midi1(100), channel: 0))
+        ))
+        long.addEvent(RecordedEvent(
+            timestamp: 1.5,
+            event: .noteOff(MIDIEvent.NoteOff(note: 64, velocity: .midi1(0), channel: 0))
+        ))
+        long.stopRecording(duration: 2.0)
+
+        // Merging a longer source into a shorter target should expand the target
+        short.mergeEvents(from: long)
+
+        #expect(short.duration == 2.0)
+        // Short looped to 2.0s = 2 reps of 2 events = 4, plus long's 2 events = 6
+        #expect(short.events.count == 6)
+    }
+
+    // MARK: - Snapshot and restore
+
+    @Test func snapshotAndRestorePreservesState() {
+        let slot = Slot(id: 0)
+        slot.startRecording()
+        slot.addEvent(RecordedEvent(
+            timestamp: 0.0,
+            event: .noteOn(MIDIEvent.NoteOn(note: 60, velocity: .midi1(100), channel: 0))
+        ))
+        slot.addEvent(RecordedEvent(
+            timestamp: 0.5,
+            event: .noteOff(MIDIEvent.NoteOff(note: 60, velocity: .midi1(0), channel: 0))
+        ))
+        slot.stopRecording(duration: 1.0)
+
+        let snapshot = slot.snapshot()
+
+        // Modify the slot
+        slot.clear()
+        #expect(slot.state == .empty)
+
+        // Restore
+        slot.restore(from: snapshot)
+        #expect(slot.state == .playing)
+        #expect(slot.events.count == 2)
+        #expect(slot.duration == 1.0)
+        #expect(slot.activeNotes.isEmpty)
+    }
 }
