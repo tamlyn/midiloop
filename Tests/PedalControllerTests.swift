@@ -2,8 +2,13 @@ import Foundation
 import Testing
 @testable import MIDILoop
 
+@Suite(.serialized)
 @MainActor
 struct PedalControllerTests {
+    init() {
+        UserDefaults.standard.removeObject(forKey: "pedalCC")
+    }
+
     // MARK: - Basic events
 
     @Test func pedalDownEmitsDown() {
@@ -41,6 +46,7 @@ struct PedalControllerTests {
     @Test func configurableCCNumber() {
         let pedal = PedalController()
         pedal.controlChangeNumber = 64
+        defer { UserDefaults.standard.removeObject(forKey: "pedalCC") }
         var events: [PedalEvent] = []
         pedal.onPedalEvent = { events.append($0) }
 

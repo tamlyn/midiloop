@@ -6,13 +6,19 @@ import QuartzCore
 /// Integration tests that simulate incoming MIDI events through the full
 /// LoopEngine → Session → Slot pipeline and assert on the resulting clip state.
 /// Focuses on multi-clip scenarios where the second clip is longer than the first.
+@Suite(.serialized)
 @MainActor
 struct ClipRecordingIntegrationTests {
+    init() {
+        UserDefaults.standard.removeObject(forKey: "noteQuantisation")
+        UserDefaults.standard.removeObject(forKey: "pedalCC")
+    }
 
     // MARK: - Helpers
 
-    /// Records a clip on the selected slot by adding events and triggering stop
-    /// with a controlled raw duration.
+    /// Records a clip on the selected slot by adding events and stopping with
+    /// a precise duration. Bypasses CACurrentMediaTime() to avoid clock drift
+    /// between setting recordingStartTime and reading it back in stopRecording.
     private func recordClip(
         engine: LoopEngine,
         session: Session,
@@ -23,15 +29,26 @@ struct ClipRecordingIntegrationTests {
         session.selectSlot(slotIndex)
         let slot = session.selectedSlot
         slot.startRecording()
-        engine.recordingStartTime = CACurrentMediaTime()
 
         for event in events {
             slot.addEvent(event)
         }
 
-        // Adjust so CACurrentMediaTime() - recordingStartTime == rawDuration
-        engine.recordingStartTime = CACurrentMediaTime() - rawDuration
-        engine.toggleRecording()
+        let finalDuration: TimeInterval
+        if session.masterLoopDuration == nil {
+            session.setMasterLoopDuration(rawDuration)
+            finalDuration = rawDuration
+            engine.playbackStartTime = CACurrentMediaTime() - rawDuration
+        } else {
+            finalDuration = session.quantisedDuration(for: rawDuration)
+        }
+
+        if session.noteQuantisation != .off {
+            slot.quantiseEvents(loopDuration: finalDuration, grid: session.noteQuantisation)
+        }
+
+        slot.stopRecording(duration: finalDuration)
+        engine.slotPlaybackOffsets[slot.id] = 0
     }
 
     private func noteOn(_ note: UInt7, at t: TimeInterval) -> RecordedEvent {
