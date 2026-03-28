@@ -17,6 +17,9 @@ final class LoopEngine {
     private var slotPlaybackIndices: [Int] = [0, 0, 0, 0]
     var slotPlaybackOffsets: [TimeInterval] = [0, 0, 0, 0]
 
+    /// Events received while a slot is armed, kept for pre-roll capture.
+    var preRollBuffer: [(event: MIDIEvent, wallTime: CFTimeInterval)] = []
+
     /// Tracks the last master loop position to detect boundary crossings.
     private var lastMasterPosition: TimeInterval = 0
 
@@ -76,6 +79,14 @@ final class LoopEngine {
             }
         }
 
+        // Buffer events while armed, for pre-roll capture at the loop boundary
+        if selectedSlot.state == .armed && session.masterLoopDuration != nil {
+            let now = CACurrentMediaTime()
+            preRollBuffer.append((event: event, wallTime: now))
+            preRollBuffer.removeAll { now - $0.wallTime > 1.0 }
+            return
+        }
+
         if selectedSlot.state == .recording {
             guard let startTime = recordingStartTime else { return }
             let timestamp = CACurrentMediaTime() - startTime
@@ -101,6 +112,7 @@ final class LoopEngine {
             } else if slot.state == .armed {
                 // Released before recording started — cancel
                 slot.clear()
+                preRollBuffer.removeAll()
                 suppressNextQuickPress = true
             }
 
@@ -171,11 +183,30 @@ final class LoopEngine {
     // MARK: - Armed → Recording transition
 
     /// Called from playbackTick when the master loop wraps around.
-    private func transitionArmedSlots(boundaryTime: CFTimeInterval) {
+    func transitionArmedSlots(boundaryTime: CFTimeInterval) {
+        let preRollWindow = computePreRollWindow()
+        let cutoff = boundaryTime - preRollWindow
+        let earlyEvents = preRollBuffer
+            .filter { $0.wallTime >= cutoff && $0.wallTime < boundaryTime }
+            .map { RecordedEvent(timestamp: 0.0, event: $0.event) }
+
         for slot in session.slots where slot.state == .armed {
             slot.startRecording()
             recordingStartTime = boundaryTime
+            for event in earlyEvents {
+                slot.addEvent(event)
+            }
         }
+        preRollBuffer.removeAll()
+    }
+
+    private func computePreRollWindow() -> TimeInterval {
+        guard let masterDuration = session.masterLoopDuration else { return 0 }
+        if session.noteQuantisation != .off {
+            let gridInterval = masterDuration / Double(session.noteQuantisation.rawValue)
+            return min(gridInterval / 2.0, 0.5)
+        }
+        return 0.030
     }
 
     // MARK: - Mute/Unmute

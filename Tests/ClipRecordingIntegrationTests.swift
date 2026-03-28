@@ -321,4 +321,140 @@ struct ClipRecordingIntegrationTests {
         let offset = engine.slotPlaybackOffsets[1]
         #expect(offset > 7.5 && offset < 8.5, "Playback offset should be ~8.0s from playback start")
     }
+
+    // MARK: - Test 8: Pre-roll captures notes played slightly before loop boundary
+
+    @Test func preRollCapturesEarlyNotesWithQuantisation() {
+        let session = Session()
+        session.noteQuantisation = .quarter
+        let midiService = MIDIService()
+        let engine = LoopEngine(session: session, midiService: midiService)
+        defer { engine.stop() }
+
+        // Set up a 4s master loop
+        session.setMasterLoopDuration(4.0)
+        let now = CACurrentMediaTime()
+        engine.playbackStartTime = now - 8.0
+        session.slots[0].startRecording()
+        session.slots[0].addEvent(noteOn(60, at: 0.0))
+        session.slots[0].addEvent(noteOff(60, at: 0.5))
+        session.slots[0].stopRecording(duration: 4.0)
+
+        // Arm slot 1
+        session.selectSlot(1)
+        session.selectedSlot.arm()
+
+        // Simulate a note arriving 100ms before the boundary
+        let boundaryTime = now
+        engine.preRollBuffer = [
+            (event: MIDIEvent.noteOn(MIDIEvent.NoteOn(note: 64, velocity: .midi1(100), channel: 0)),
+             wallTime: boundaryTime - 0.1),
+            (event: MIDIEvent.noteOff(MIDIEvent.NoteOff(note: 64, velocity: .midi1(0), channel: 0)),
+             wallTime: boundaryTime - 0.05),
+        ]
+
+        // Quarter quantisation on 4s loop: grid = 1.0s, window = 0.5s
+        // 100ms is within the 500ms window
+        engine.transitionArmedSlots(boundaryTime: boundaryTime)
+
+        let slot1 = session.slots[1]
+        #expect(slot1.state == .recording)
+        #expect(slot1.events.count == 2, "Both pre-roll events should be captured")
+        #expect(slot1.events[0].timestamp == 0.0)
+        #expect(slot1.events[1].timestamp == 0.0)
+    }
+
+    // MARK: - Test 9: Pre-roll drops events outside the window
+
+    @Test func preRollDropsEventsOutsideWindow() {
+        let session = Session()
+        session.noteQuantisation = .quarter
+        let midiService = MIDIService()
+        let engine = LoopEngine(session: session, midiService: midiService)
+        defer { engine.stop() }
+
+        session.setMasterLoopDuration(4.0)
+        let now = CACurrentMediaTime()
+        engine.playbackStartTime = now - 8.0
+        session.slots[0].startRecording()
+        session.slots[0].addEvent(noteOn(60, at: 0.0))
+        session.slots[0].stopRecording(duration: 4.0)
+
+        session.selectSlot(1)
+        session.selectedSlot.arm()
+
+        let boundaryTime = now
+        // 800ms before boundary — outside the 500ms window for quarter on 4s loop
+        engine.preRollBuffer = [
+            (event: MIDIEvent.noteOn(MIDIEvent.NoteOn(note: 64, velocity: .midi1(100), channel: 0)),
+             wallTime: boundaryTime - 0.8),
+        ]
+
+        engine.transitionArmedSlots(boundaryTime: boundaryTime)
+
+        let slot1 = session.slots[1]
+        #expect(slot1.events.isEmpty, "Event outside pre-roll window should be dropped")
+    }
+
+    // MARK: - Test 10: Pre-roll with quantisation off uses fixed tolerance
+
+    @Test func preRollWithQuantisationOffUsesFixedTolerance() {
+        let session = Session()
+        session.noteQuantisation = .off
+        let midiService = MIDIService()
+        let engine = LoopEngine(session: session, midiService: midiService)
+        defer { engine.stop() }
+
+        session.setMasterLoopDuration(4.0)
+        let now = CACurrentMediaTime()
+        engine.playbackStartTime = now - 8.0
+        session.slots[0].startRecording()
+        session.slots[0].addEvent(noteOn(60, at: 0.0))
+        session.slots[0].stopRecording(duration: 4.0)
+
+        session.selectSlot(1)
+        session.selectedSlot.arm()
+
+        let boundaryTime = now
+        engine.preRollBuffer = [
+            // 20ms before — within 30ms tolerance
+            (event: MIDIEvent.noteOn(MIDIEvent.NoteOn(note: 64, velocity: .midi1(100), channel: 0)),
+             wallTime: boundaryTime - 0.020),
+            // 50ms before — outside 30ms tolerance
+            (event: MIDIEvent.noteOn(MIDIEvent.NoteOn(note: 67, velocity: .midi1(100), channel: 0)),
+             wallTime: boundaryTime - 0.050),
+        ]
+
+        engine.transitionArmedSlots(boundaryTime: boundaryTime)
+
+        let slot1 = session.slots[1]
+        #expect(slot1.events.count == 1, "Only the event within 30ms should be captured")
+        if case .noteOn(let payload) = slot1.events.first?.event {
+            #expect(payload.note.number == 64)
+        } else {
+            Issue.record("Expected noteOn event")
+        }
+    }
+
+    // MARK: - Test 11: Pre-roll buffer cleared after transition
+
+    @Test func preRollBufferClearedAfterTransition() {
+        let session = Session()
+        let midiService = MIDIService()
+        let engine = LoopEngine(session: session, midiService: midiService)
+        defer { engine.stop() }
+
+        session.setMasterLoopDuration(4.0)
+        engine.playbackStartTime = CACurrentMediaTime() - 8.0
+
+        engine.preRollBuffer = [
+            (event: MIDIEvent.noteOn(MIDIEvent.NoteOn(note: 64, velocity: .midi1(100), channel: 0)),
+             wallTime: CACurrentMediaTime()),
+        ]
+
+        // No armed slots — buffer should still be cleared
+        engine.transitionArmedSlots(boundaryTime: CACurrentMediaTime())
+
+        #expect(engine.preRollBuffer.isEmpty)
+    }
 }
