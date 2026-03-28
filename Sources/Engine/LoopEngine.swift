@@ -256,6 +256,7 @@ final class LoopEngine {
     /// Move a slot's content to an empty target slot.
     func moveSlot(from source: Slot, to target: Slot) {
         guard target.state == .empty else { return }
+        pushUndo(label: "Move", slots: [source, target])
         midiService.sendNoteOffs(for: source.activeNotes)
         source.clearActiveNotes()
 
@@ -357,6 +358,10 @@ final class LoopEngine {
             let slot = session.slots[snapshot.slotId]
             midiService.sendNoteOffs(for: slot.activeNotes)
             slot.restore(from: snapshot)
+            // Armed is transient (pedal held) — never restore to it
+            if slot.state == .armed {
+                slot.clear()
+            }
         }
 
         // Restore engine playback state

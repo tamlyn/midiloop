@@ -124,6 +124,36 @@ struct UndoTests {
         #expect(session.selectedSlotIndex == 0)
     }
 
+    // MARK: - Move undo
+
+    @Test func undoMoveRestoresSourceAndClearsTarget() {
+        let session = Session()
+        let midi = MIDIService()
+        let engine = LoopEngine(session: session, midiService: midi, pedalController: PedalController())
+        defer { engine.stop() }
+
+        recordClip(engine: engine, session: session, slotIndex: 0, events: [
+            noteOn(60, at: 0.0), noteOff(60, at: 0.5),
+        ], rawDuration: 1.0)
+
+        let source = session.slots[0]
+        let target = session.slots[1]
+        #expect(source.state == .playing)
+        #expect(target.state == .empty)
+
+        engine.moveSlot(from: source, to: target)
+        #expect(source.state == .empty)
+        #expect(target.state == .playing)
+        #expect(target.events.count == 2)
+
+        engine.undo()
+        #expect(source.state == .playing)
+        #expect(source.events.count == 2)
+        #expect(source.duration == 1.0)
+        #expect(target.state == .empty)
+        #expect(target.events.isEmpty)
+    }
+
     // MARK: - Merge undo
 
     @Test func undoMergeRestoresBothSlots() {
@@ -182,6 +212,31 @@ struct UndoTests {
         #expect(slot.state == .empty)
         #expect(slot.events.isEmpty)
         #expect(session.masterLoopDuration == nil)
+    }
+
+    @Test func undoRecordingFromArmedRestoresToEmpty() {
+        let session = Session()
+        let midi = MIDIService()
+        let engine = LoopEngine(session: session, midiService: midi, pedalController: PedalController())
+        defer { engine.stop() }
+
+        let slot = session.slots[0]
+        // Simulate pedal flow: arm then snapshot (as LoopEngine does)
+        slot.arm()
+        #expect(slot.state == .armed)
+        engine.capturePendingRecordingSnapshot(for: slot)
+
+        recordClip(engine: engine, session: session, slotIndex: 0, events: [
+            noteOn(60, at: 0.0), noteOff(60, at: 0.5),
+        ], rawDuration: 1.0)
+        engine.commitPendingRecordingUndo()
+
+        #expect(slot.state == .playing)
+
+        engine.undo()
+        // Armed is transient (pedal held) — undo should restore to empty
+        #expect(slot.state == .empty)
+        #expect(slot.events.isEmpty)
     }
 
     // MARK: - Stack behaviour

@@ -44,6 +44,9 @@ final class Session {
 
     func selectSlot(_ index: Int) {
         guard index >= 0 && index < slots.count else { return }
+        for (i, slot) in slots.enumerated() where i != index && slot.state == .armed {
+            slot.clear()
+        }
         selectedSlotIndex = index
     }
 
