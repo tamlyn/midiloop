@@ -21,7 +21,7 @@ enum NoteQuantisation: Int, CaseIterable, Identifiable {
     }
 }
 
-@Observable
+@MainActor @Observable
 final class Session {
     let slots: [Slot] = (0..<4).map { Slot(id: $0) }
     private(set) var selectedSlotIndex: Int = 0

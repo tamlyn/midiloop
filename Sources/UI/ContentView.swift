@@ -29,14 +29,13 @@ struct ContentView: View {
                 }
                 .buttonStyle(ActionButtonStyle(colour: Theme.panelLight))
 
-                Button {
+                Button("Settings", systemImage: "gearshape.fill") {
                     showingSettings = true
-                } label: {
-                    Image(systemName: "gearshape.fill")
-                        .font(.title3)
-                        .foregroundStyle(Theme.textSecondary)
-                        .padding(8)
                 }
+                .labelStyle(.iconOnly)
+                .font(.title3)
+                .foregroundStyle(Theme.textSecondary)
+                .padding(8)
             }
             .padding(.horizontal)
             .padding(.top, 8)
@@ -67,7 +66,7 @@ struct ActionButtonStyle: ButtonStyle {
             .padding(.vertical, 8)
             .background(
                 colour.opacity(configuration.isPressed ? 0.6 : 1.0),
-                in: RoundedRectangle(cornerRadius: Theme.buttonRadius)
+                in: RoundedRectangle(cornerRadius: Theme.buttonRadius, style: .continuous)
             )
     }
 }

@@ -47,7 +47,7 @@ final class PedalController {
     }
 
     private func pedalDown() {
-        pressTime = Date()
+        pressTime = .now
         longPressFired = false
 
         // Always emit down immediately
@@ -70,7 +70,7 @@ final class PedalController {
         onPedalEvent?(.up)
 
         guard let press = pressTime else { return }
-        let holdDuration = Date().timeIntervalSince(press)
+        let holdDuration = Date.now.timeIntervalSince(press)
         pressTime = nil
 
         // If it was a short press and long-press didn't fire, emit quickPress

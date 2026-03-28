@@ -22,7 +22,7 @@ enum SlotState {
     case muted
 }
 
-@Observable
+@MainActor @Observable
 final class Slot: Identifiable {
     let id: Int
     private(set) var state: SlotState = .empty

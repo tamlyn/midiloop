@@ -7,39 +7,53 @@ struct SlotGrid: View {
     var body: some View {
         Grid(horizontalSpacing: 10, verticalSpacing: 10) {
             GridRow {
-                slotButton(session.slots[0])
-                slotButton(session.slots[1])
+                SlotButton(slot: session.slots[0], session: session, engine: engine)
+                SlotButton(slot: session.slots[1], session: session, engine: engine)
             }
             GridRow {
-                slotButton(session.slots[2])
-                slotButton(session.slots[3])
+                SlotButton(slot: session.slots[2], session: session, engine: engine)
+                SlotButton(slot: session.slots[3], session: session, engine: engine)
             }
         }
     }
+}
 
-    @ViewBuilder
-    private func slotButton(_ slot: Slot) -> some View {
+private struct SlotButton: View {
+    let slot: Slot
+    let session: Session
+    let engine: LoopEngine?
+
+    var body: some View {
         let isSelected = slot.id == session.selectedSlotIndex
         SlotView(slot: slot, isSelected: isSelected)
-            .contentShape(RoundedRectangle(cornerRadius: Theme.slotRadius))
+            .contentShape(RoundedRectangle(cornerRadius: Theme.slotRadius, style: .continuous))
             .onTapGesture {
-                handleTap(slot)
+                if slot.id == session.selectedSlotIndex {
+                    switch slot.state {
+                    case .empty, .armed, .recording:
+                        engine?.toggleRecording()
+                    case .playing, .muted:
+                        engine?.toggleMute()
+                    }
+                } else {
+                    session.selectSlot(slot.id)
+                }
             }
             .onLongPressGesture {
                 engine?.clearSlot(slot)
             }
+            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel("Slot \(slot.id + 1)")
+            .accessibilityValue(slotAccessibilityValue)
     }
 
-    private func handleTap(_ slot: Slot) {
-        if slot.id == session.selectedSlotIndex {
-            switch slot.state {
-            case .empty, .armed, .recording:
-                engine?.toggleRecording()
-            case .playing, .muted:
-                engine?.toggleMute()
-            }
-        } else {
-            session.selectSlot(slot.id)
+    private var slotAccessibilityValue: String {
+        switch slot.state {
+        case .empty: "Empty"
+        case .armed: "Armed"
+        case .recording: "Recording"
+        case .playing: "Playing"
+        case .muted: "Muted"
         }
     }
 }
@@ -67,7 +81,7 @@ struct SlotView: View {
     var body: some View {
         ZStack(alignment: .leading) {
             // Dark panel background
-            RoundedRectangle(cornerRadius: Theme.slotRadius)
+            RoundedRectangle(cornerRadius: Theme.slotRadius, style: .continuous)
                 .fill(Theme.panel)
 
             // Coloured left accent strip
@@ -104,7 +118,7 @@ struct SlotView: View {
                             .foregroundStyle(accentColour)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(Theme.background.opacity(0.7), in: RoundedRectangle(cornerRadius: 3))
+                            .background(Theme.background.opacity(0.7), in: RoundedRectangle(cornerRadius: 3, style: .continuous))
                         Text(stateLabel)
                             .font(.system(size: 10, weight: .semibold, design: .monospaced))
                             .foregroundStyle(Theme.textSecondary)
@@ -143,9 +157,9 @@ struct SlotView: View {
         }
         .foregroundStyle(Theme.textPrimary)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.slotRadius))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.slotRadius, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: Theme.slotRadius)
+            RoundedRectangle(cornerRadius: Theme.slotRadius, style: .continuous)
                 .stroke(
                     isSelected ? accentColour.opacity(0.8) : Theme.panelLight.opacity(0.5),
                     lineWidth: isSelected ? 2 : 1
