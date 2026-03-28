@@ -89,6 +89,10 @@ final class Session {
         return index
     }
 
+    func restoreMasterLoopDuration(_ duration: TimeInterval?) {
+        masterLoopDuration = duration
+    }
+
     func updateLoopPosition(_ position: TimeInterval) {
         loopPosition = position
     }

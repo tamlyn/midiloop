@@ -52,6 +52,7 @@ project.yml    xcodegen project spec
 
 - **MIDIService** — wraps MIDIKit's `ObservableMIDIManager`. Handles device connections, pass-through (on the MIDI thread for low latency), and event routing.
 - **LoopEngine** — `@MainActor`. Coordinates recording, playback (via `CADisplayLink`), and pedal control. Receives MIDI events from MIDIService via `Task { @MainActor in }` dispatch.
+- **UndoSystem** — `UndoEntry` snapshots on `LoopEngine`. Captures slot state before clear, merge, and recording operations. Max 10 entries. Clear All resets the stack.
 - **Session** — observable model holding 4 `Slot`s, master loop duration, and loop position.
 - **Slot** — state machine: `empty → armed → recording → playing ⇄ muted`. Tracks active notes for stuck note prevention. Precomputes `noteBars` for piano roll visualisation on recording stop. `RecordedEvent` and `NoteBar` carry a `colourIndex` so merged slots display multi-coloured notes.
 - **NoteQuantiser** — snaps loop length to power-of-2 multiples (1/2x, 1x, 2x, 4x).
@@ -65,6 +66,7 @@ project.yml    xcodegen project spec
 - **No external dependencies** beyond MIDIKit.
 - **UI theme**: `Theme.swift` centralises colours, radii, and per-slot clip colours. FL Studio-inspired dark panel aesthetic.
 - **Slot gestures**: Single tap mutes/unmutes. Two-finger tap (UIKit bridge in `TwoFingerTapView`) selects or arms. Drag moves/merges/deletes slots.
+- **Undo**: Custom stack on LoopEngine (not SwiftUI UndoManager). Snapshots slot events/duration/state plus engine playback indices before destructive operations. Recording snapshots are captured at recording start, pushed at stop.
 
 ## Swift 6 concurrency patterns
 

@@ -15,6 +15,14 @@ struct ContentView: View {
                 Spacer()
 
                 Button {
+                    engine?.undo()
+                } label: {
+                    Label("Undo", systemImage: "arrow.uturn.backward")
+                }
+                .buttonStyle(ActionButtonStyle(colour: Theme.panelLight))
+                .disabled(engine?.undoStack.isEmpty ?? true)
+
+                Button {
                     engine?.sendAllNotesOff()
                 } label: {
                     Label("Panic", systemImage: "exclamationmark.triangle.fill")
@@ -22,8 +30,7 @@ struct ContentView: View {
                 .buttonStyle(ActionButtonStyle(colour: Theme.recording))
 
                 Button {
-                    engine?.sendAllNotesOff()
-                    session.clearAll()
+                    engine?.clearAll()
                 } label: {
                     Label("Clear All", systemImage: "trash")
                 }

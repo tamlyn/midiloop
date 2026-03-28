@@ -29,6 +29,11 @@ final class LoopEngine {
     /// Colour index for the current recording take.
     private var recordingColourIndex: Int = 0
 
+    /// Undo stack for reversible operations.
+    private(set) var undoStack: [UndoEntry] = []
+    var pendingRecordingSnapshot: UndoEntry?
+    private let maxUndoDepth = 10
+
     init(session: Session, midiService: MIDIService) {
         self.session = session
         self.midiService = midiService
@@ -75,6 +80,7 @@ final class LoopEngine {
         // First loop: armed slot transitions to recording on first note
         if selectedSlot.state == .armed && session.masterLoopDuration == nil {
             if case .noteOn = event {
+                capturePendingRecordingSnapshot(for: selectedSlot)
                 selectedSlot.startRecording()
                 recordingStartTime = CACurrentMediaTime()
                 recordingColourIndex = session.claimNextColour()
@@ -117,6 +123,7 @@ final class LoopEngine {
                 // Released before recording started — cancel
                 slot.clear()
                 preRollBuffer.removeAll()
+                pendingRecordingSnapshot = nil
                 suppressNextQuickPress = true
             }
 
@@ -151,6 +158,7 @@ final class LoopEngine {
             startRecording()
         case .armed:
             slot.clear()
+            pendingRecordingSnapshot = nil
         case .recording:
             stopRecording(slot)
         default:
@@ -182,6 +190,8 @@ final class LoopEngine {
         slot.stopRecording(duration: finalDuration)
         slotPlaybackIndices[slot.id] = 0
         slotPlaybackOffsets[slot.id] = startTime - playbackStartTime
+
+        commitPendingRecordingUndo()
     }
 
     // MARK: - Armed → Recording transition
@@ -194,6 +204,7 @@ final class LoopEngine {
             .filter { $0.wallTime >= cutoff && $0.wallTime < boundaryTime }
 
         for slot in session.slots where slot.state == .armed {
+            capturePendingRecordingSnapshot(for: slot)
             slot.startRecording()
             recordingStartTime = boundaryTime
             recordingColourIndex = session.claimNextColour()
@@ -256,6 +267,7 @@ final class LoopEngine {
 
     /// Merge a slot's events into another non-empty slot.
     func mergeSlot(source: Slot, into target: Slot) {
+        pushUndo(label: "Merge", slots: [source, target])
         midiService.sendNoteOffs(for: source.activeNotes)
         source.clearActiveNotes()
 
@@ -274,6 +286,7 @@ final class LoopEngine {
     func clearAndAdvance() {
         let slot = session.selectedSlot
         if slot.state != .empty {
+            pushUndo(label: "Clear", slots: [slot])
             midiService.sendNoteOffs(for: slot.activeNotes)
             slot.clear()
 
@@ -285,13 +298,84 @@ final class LoopEngine {
         }
     }
 
+    func clearAll() {
+        sendAllNotesOff()
+        session.clearAll()
+        slotPlaybackIndices = [0, 0, 0, 0]
+        slotPlaybackOffsets = [0, 0, 0, 0]
+        undoStack.removeAll()
+        pendingRecordingSnapshot = nil
+    }
+
     func clearSlot(_ slot: Slot) {
+        pushUndo(label: "Clear", slots: [slot])
         midiService.sendNoteOffs(for: slot.activeNotes)
         slot.clear()
 
         if session.allSlotsEmpty {
             session.clearAll()
         }
+    }
+
+    // MARK: - Undo
+
+    private func pushUndo(label: String, slots: [Slot]) {
+        let entry = UndoEntry(
+            label: label,
+            slotSnapshots: slots.map { $0.snapshot() },
+            playbackIndices: slotPlaybackIndices,
+            playbackOffsets: slotPlaybackOffsets,
+            masterLoopDuration: session.masterLoopDuration,
+            selectedSlotIndex: session.selectedSlotIndex
+        )
+        undoStack.append(entry)
+        if undoStack.count > maxUndoDepth {
+            undoStack.removeFirst()
+        }
+    }
+
+    func capturePendingRecordingSnapshot(for slot: Slot) {
+        pendingRecordingSnapshot = UndoEntry(
+            label: "Record",
+            slotSnapshots: [slot.snapshot()],
+            playbackIndices: slotPlaybackIndices,
+            playbackOffsets: slotPlaybackOffsets,
+            masterLoopDuration: session.masterLoopDuration,
+            selectedSlotIndex: session.selectedSlotIndex
+        )
+    }
+
+    func undo() {
+        guard let entry = undoStack.popLast() else { return }
+
+        // Silence any active notes in affected slots
+        for snapshot in entry.slotSnapshots {
+            let slot = session.slots[snapshot.slotId]
+            midiService.sendNoteOffs(for: slot.activeNotes)
+            slot.restore(from: snapshot)
+        }
+
+        // Restore engine playback state
+        slotPlaybackIndices = entry.playbackIndices
+        slotPlaybackOffsets = entry.playbackOffsets
+
+        // Restore session state
+        session.restoreMasterLoopDuration(entry.masterLoopDuration)
+        session.selectSlot(entry.selectedSlotIndex)
+    }
+
+    func commitPendingRecordingUndo() {
+        if let snapshot = pendingRecordingSnapshot {
+            undoStack.append(snapshot)
+            if undoStack.count > maxUndoDepth {
+                undoStack.removeFirst()
+            }
+            pendingRecordingSnapshot = nil
+        }
+    }
+
+    func clearUndoStack() {
+        undoStack.removeAll()
     }
 
     // MARK: - Playback Loop

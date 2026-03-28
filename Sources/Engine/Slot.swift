@@ -130,6 +130,25 @@ final class Slot: Identifiable {
         activeNotes = []
     }
 
+    func snapshot() -> SlotSnapshot {
+        SlotSnapshot(
+            slotId: id,
+            state: state,
+            events: events,
+            duration: duration,
+            noteBars: noteBars
+        )
+    }
+
+    func restore(from snapshot: SlotSnapshot) {
+        state = snapshot.state
+        events = snapshot.events
+        duration = snapshot.duration
+        noteBars = snapshot.noteBars
+        playbackPosition = 0
+        activeNotes = []
+    }
+
     // MARK: - Note bar computation
 
     /// Accepts events and state from another slot (for drag-to-move).
