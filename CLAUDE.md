@@ -14,8 +14,8 @@ xcodebuild -project MIDILoop.xcodeproj -scheme MIDILoop -destination 'platform=i
 ### Device build (iPad)
 
 ```sh
-xcodebuild -project MIDILoop.xcodeproj -scheme MIDILoop -destination 'id=00008120-00164CC40E080032' -allowProvisioningUpdates build
-xcrun devicectl device install app --device 00008120-00164CC40E080032 /Users/tamlyn/Library/Developer/Xcode/DerivedData/MIDILoop-byuqpqtzeopovvbhznechqiynift/Build/Products/Debug-iphoneos/MIDILoop.app
+xcodebuild -project MIDILoop.xcodeproj -scheme MIDILoop -destination 'id=00008120-00164CC40E080032' -derivedDataPath build -allowProvisioningUpdates build
+xcrun devicectl device install app --device 00008120-00164CC40E080032 build/Build/Products/Debug-iphoneos/MIDILoop.app
 ```
 
 Always regenerate the Xcode project with `xcodegen generate` after editing `project.yml`.
@@ -41,18 +41,20 @@ Uses Swift Testing (`import Testing`), not XCTest. Tests need `@MainActor` for `
 ```
 Sources/
   App/         App entry point (MIDILoopApp)
-  Engine/      Session, Slot, LoopEngine
+  Engine/      Session, Slot, LoopEngine, NoteQuantiser
   MIDI/        MIDIService (wraps MIDIKit)
   Pedal/       PedalController (gesture recognition)
   UI/          SwiftUI views
+Tests/         Swift Testing tests
 Supporting/    Info.plist, entitlements
 project.yml    xcodegen project spec
 ```
 
-- **MIDIService** — wraps MIDIKit's `ObservableMIDIManager`. Handles device connections, pass-through (on the MIDI thread for low latency), and event routing. Must use `legacyCoreMIDI` API because BLE MIDI only supports MIDI 1.0.
+- **MIDIService** — wraps MIDIKit's `ObservableMIDIManager`. Handles device connections, pass-through (on the MIDI thread for low latency), and event routing.
 - **LoopEngine** — `@MainActor`. Coordinates recording, playback (via `CADisplayLink`), and pedal control. Receives MIDI events from MIDIService via `Task { @MainActor in }` dispatch.
 - **Session** — observable model holding 4 `Slot`s, master loop duration, and loop position.
 - **Slot** — state machine: `empty → armed → recording → playing ⇄ muted`. Tracks active notes for stuck note prevention. Precomputes `noteBars` for piano roll visualisation on recording stop.
+- **NoteQuantiser** — snaps loop length to power-of-2 multiples (1/2x, 1x, 2x, 4x).
 - **PedalController** — emits raw pedal events (down/up/quickPress/longPress). LoopEngine interprets them based on slot state: hold-to-record on empty slots, quick press to toggle mute, long press to clear.
 
 ## Key decisions
@@ -70,3 +72,7 @@ project.yml    xcodegen project spec
 - Timer closures use `MainActor.assumeIsolated` (timers fire on main run loop).
 - MIDIKit uses `UInt7`/`UInt4` types — convert with `UInt8(value)` at boundaries.
 - SourceKit diagnostics lag behind actual build state — trust `xcodebuild` output.
+
+## Gotchas
+
+- **File/class name mismatch**: `Sources/MIDI/MIDIManager.swift` contains the class `MIDIService`, not `MIDIManager`.

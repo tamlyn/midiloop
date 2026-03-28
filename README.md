@@ -10,10 +10,11 @@ The app produces no audio of its own — it operates purely as a MIDI recorder a
 - **MIDI pass-through** — hear yourself playing in real time with imperceptible latency
 - **Loop quantisation** — first recording sets the master loop length; subsequent recordings snap to exact multiples
 - **Note quantisation** — optionally snap notes to a grid (1/4, 1/8, 1/16, 1/32) when recording stops
+- **Pre-roll capture** — notes played just before the loop boundary are included in the recording
 - **Pedal control** — use the soft pedal (or any configurable CC) for hands-free operation:
-  - Quick press: start/stop recording
-  - Double press: mute/unmute
-  - Long press: clear slot and advance
+  - Hold: arm and record on empty slot, release to stop
+  - Quick press: toggle mute
+  - Long press: clear slot and advance to next
 - **USB and Bluetooth MIDI** — connect to any CoreMIDI-compatible device
 - **Stuck note prevention** — tracks all sounding notes and sends Note Off on mute, clear, loop restart, and app background
 - **Live performance UI** — large touch targets readable at arm's length, dark theme
@@ -22,16 +23,22 @@ The app produces no audio of its own — it operates purely as a MIDI recorder a
 
 - iOS 18.0+
 - iPhone or iPad
-- A MIDI keyboard or digital piano (USB or Bluetooth)
+- A MIDI synth or digital piano (USB or Bluetooth) that creates its own sound
 
 ## Building
 
-The project uses [xcodegen](https://github.com/yonaskolb/XcodeGen) to manage the Xcode project.
+Requires Xcode 16.4+ and [xcodegen](https://github.com/yonaskolb/XcodeGen).
 
 ```sh
 brew install xcodegen
 xcodegen generate
 xcodebuild -project MIDILoop.xcodeproj -scheme MIDILoop -destination 'platform=iOS Simulator,name=iPhone 16 Pro' build
+```
+
+Run tests with:
+
+```sh
+xcodebuild test -project MIDILoop.xcodeproj -scheme MIDILoop -destination 'platform=iOS Simulator,name=iPhone 16 Pro'
 ```
 
 ## Dependencies
