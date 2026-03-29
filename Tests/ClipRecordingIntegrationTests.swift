@@ -14,57 +14,6 @@ struct ClipRecordingIntegrationTests {
         UserDefaults.standard.removeObject(forKey: "pedalCC")
     }
 
-    // MARK: - Helpers
-
-    /// Records a clip on the selected slot by adding events and stopping with
-    /// a precise duration. Bypasses CACurrentMediaTime() to avoid clock drift
-    /// between setting recordingStartTime and reading it back in stopRecording.
-    private func recordClip(
-        engine: LoopEngine,
-        session: Session,
-        slotIndex: Int,
-        events: [RecordedEvent],
-        rawDuration: TimeInterval
-    ) {
-        session.selectSlot(slotIndex)
-        let slot = session.selectedSlot
-        slot.startRecording()
-
-        for event in events {
-            slot.addEvent(event)
-        }
-
-        let finalDuration: TimeInterval
-        if session.masterLoopDuration == nil {
-            session.setMasterLoopDuration(rawDuration)
-            finalDuration = rawDuration
-            engine.playbackStartTime = CACurrentMediaTime() - rawDuration
-        } else {
-            finalDuration = session.quantisedDuration(for: rawDuration)
-        }
-
-        if session.noteQuantisation != .off {
-            slot.quantiseEvents(loopDuration: finalDuration, grid: session.noteQuantisation)
-        }
-
-        slot.stopRecording(duration: finalDuration)
-        engine.slotPlaybackOffsets[slot.id] = 0
-    }
-
-    private func noteOn(_ note: UInt7, at t: TimeInterval) -> RecordedEvent {
-        RecordedEvent(
-            timestamp: t,
-            event: .noteOn(MIDIEvent.NoteOn(note: note, velocity: .midi1(100), channel: 0))
-        )
-    }
-
-    private func noteOff(_ note: UInt7, at t: TimeInterval) -> RecordedEvent {
-        RecordedEvent(
-            timestamp: t,
-            event: .noteOff(MIDIEvent.NoteOff(note: note, velocity: .midi1(0), channel: 0))
-        )
-    }
-
     // MARK: - Test 1: Baseline first clip
 
     @Test func firstClipSetsCorrectDurationAndNoteBars() {
@@ -80,7 +29,7 @@ struct ClipRecordingIntegrationTests {
             noteOff(64, at: 1.5),
         ]
 
-        recordClip(engine: engine, session: session, slotIndex: 0, events: events, rawDuration: 4.0)
+        recordClip(engine: engine, session: session, slotIndex: 0, events: events, rawDuration: 4.0, applyQuantisation: true)
 
         let slot = session.slots[0]
         #expect(slot.state == .playing)
@@ -113,13 +62,13 @@ struct ClipRecordingIntegrationTests {
         recordClip(engine: engine, session: session, slotIndex: 0, events: [
             noteOn(60, at: 0.0),
             noteOff(60, at: 0.5),
-        ], rawDuration: 4.0)
+        ], rawDuration: 4.0, applyQuantisation: true)
 
         // Second clip: ~3.5s raw → should snap to 4.0 (1x master)
         recordClip(engine: engine, session: session, slotIndex: 1, events: [
             noteOn(72, at: 0.0),
             noteOff(72, at: 1.0),
-        ], rawDuration: 3.5)
+        ], rawDuration: 3.5, applyQuantisation: true)
 
         let slot1 = session.slots[1]
         #expect(slot1.state == .playing)
@@ -145,7 +94,7 @@ struct ClipRecordingIntegrationTests {
         recordClip(engine: engine, session: session, slotIndex: 0, events: [
             noteOn(60, at: 0.0),
             noteOff(60, at: 0.5),
-        ], rawDuration: 4.0)
+        ], rawDuration: 4.0, applyQuantisation: true)
 
         // Second clip: ~7.8s raw → should snap to 8.0 (2x master)
         // Notes span both halves of the 2x clip
@@ -156,7 +105,7 @@ struct ClipRecordingIntegrationTests {
             noteOff(64, at: 5.5),
             noteOn(67, at: 6.0),
             noteOff(67, at: 7.5),
-        ], rawDuration: 7.8)
+        ], rawDuration: 7.8, applyQuantisation: true)
 
         let slot1 = session.slots[1]
         #expect(slot1.state == .playing)
@@ -193,7 +142,7 @@ struct ClipRecordingIntegrationTests {
         recordClip(engine: engine, session: session, slotIndex: 0, events: [
             noteOn(60, at: 0.0),
             noteOff(60, at: 0.5),
-        ], rawDuration: 4.0)
+        ], rawDuration: 4.0, applyQuantisation: true)
 
         // Second clip: 2x master with notes in second half
         // Note at t=5.0 should NOT have its note-off clamped to 4.0
@@ -202,7 +151,7 @@ struct ClipRecordingIntegrationTests {
             noteOff(60, at: 1.0),
             noteOn(64, at: 5.0),
             noteOff(64, at: 6.0),
-        ], rawDuration: 7.8)
+        ], rawDuration: 7.8, applyQuantisation: true)
 
         let slot1 = session.slots[1]
         #expect(slot1.state == .playing)
@@ -236,7 +185,7 @@ struct ClipRecordingIntegrationTests {
         recordClip(engine: engine, session: session, slotIndex: 0, events: [
             noteOn(60, at: 0.0),
             noteOff(60, at: 0.5),
-        ], rawDuration: 4.0)
+        ], rawDuration: 4.0, applyQuantisation: true)
 
         // Second clip: 2x with an unclosed note in the second half
         recordClip(engine: engine, session: session, slotIndex: 1, events: [
@@ -244,7 +193,7 @@ struct ClipRecordingIntegrationTests {
             noteOff(60, at: 2.0),
             noteOn(64, at: 5.0),
             // No noteOff for 64 — held through end
-        ], rawDuration: 7.8)
+        ], rawDuration: 7.8, applyQuantisation: true)
 
         let slot1 = session.slots[1]
         #expect(slot1.duration == 8.0)
@@ -273,7 +222,7 @@ struct ClipRecordingIntegrationTests {
         recordClip(engine: engine, session: session, slotIndex: 0, events: [
             noteOn(60, at: 0.0),
             noteOff(60, at: 0.5),
-        ], rawDuration: 4.0)
+        ], rawDuration: 4.0, applyQuantisation: true)
 
         let timestamps: [TimeInterval] = [0.1, 0.6, 2.0, 2.5, 4.1, 4.6, 6.0, 7.0]
         var events: [RecordedEvent] = []
@@ -286,7 +235,7 @@ struct ClipRecordingIntegrationTests {
             }
         }
 
-        recordClip(engine: engine, session: session, slotIndex: 1, events: events, rawDuration: 7.9)
+        recordClip(engine: engine, session: session, slotIndex: 1, events: events, rawDuration: 7.9, applyQuantisation: true)
 
         let slot1 = session.slots[1]
         #expect(slot1.duration == 8.0)

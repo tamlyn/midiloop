@@ -27,14 +27,13 @@ final class LoopEngine {
     /// Set when recording stops, to prevent quickPress from toggling mute.
     private var suppressNextQuickPress = false
 
-    /// Colour index for the current recording take.
     private var recordingTakeIndex: Int = 0
 
     /// Undo stack for reversible operations.
     private var undoStack: [UndoEntry] = []
     var canUndo: Bool { !undoStack.isEmpty }
     var undoCount: Int { undoStack.count }
-    var pendingRecordingSnapshot: UndoEntry?
+    private(set) var pendingRecordingSnapshot: UndoEntry?
     private let maxUndoDepth = 10
 
     init(session: Session, midiService: MIDIService, pedalController: PedalController) {
@@ -324,8 +323,8 @@ final class LoopEngine {
 
     // MARK: - Undo
 
-    private func pushUndo(label: String, slots: [Slot]) {
-        let entry = UndoEntry(
+    private func makeUndoEntry(label: String, slots: [Slot]) -> UndoEntry {
+        UndoEntry(
             label: label,
             slotSnapshots: slots.map { $0.snapshot() },
             playbackIndices: slotPlaybackIndices,
@@ -333,21 +332,21 @@ final class LoopEngine {
             masterLoopDuration: session.masterLoopDuration,
             selectedSlotIndex: session.selectedSlotIndex
         )
+    }
+
+    private func appendToUndoStack(_ entry: UndoEntry) {
         undoStack.append(entry)
         if undoStack.count > maxUndoDepth {
             undoStack.removeFirst()
         }
     }
 
+    private func pushUndo(label: String, slots: [Slot]) {
+        appendToUndoStack(makeUndoEntry(label: label, slots: slots))
+    }
+
     func capturePendingRecordingSnapshot(for slot: Slot) {
-        pendingRecordingSnapshot = UndoEntry(
-            label: "Record",
-            slotSnapshots: [slot.snapshot()],
-            playbackIndices: slotPlaybackIndices,
-            playbackOffsets: slotPlaybackOffsets,
-            masterLoopDuration: session.masterLoopDuration,
-            selectedSlotIndex: session.selectedSlotIndex
-        )
+        pendingRecordingSnapshot = makeUndoEntry(label: "Record", slots: [slot])
     }
 
     func undo() {
@@ -375,16 +374,9 @@ final class LoopEngine {
 
     func commitPendingRecordingUndo() {
         if let snapshot = pendingRecordingSnapshot {
-            undoStack.append(snapshot)
-            if undoStack.count > maxUndoDepth {
-                undoStack.removeFirst()
-            }
+            appendToUndoStack(snapshot)
             pendingRecordingSnapshot = nil
         }
-    }
-
-    func clearUndoStack() {
-        undoStack.removeAll()
     }
 
     // MARK: - Playback Loop

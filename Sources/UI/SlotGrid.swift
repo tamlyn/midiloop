@@ -30,7 +30,7 @@ struct SlotGrid: View {
         let isDragging = draggedSlotId == slot.id
         let isDropTarget = draggedSlotId != nil && draggedSlotId != slot.id
 
-        SlotView(slot: slot, isSelected: isSelected, playbackPosition: engine?.slotPlaybackPositions[slot.id] ?? 0, showNotes: !isDragging)
+        SlotView(slot: slot, isSelected: isSelected, showNotes: !isDragging)
             .overlay {
                 if isDropTarget {
                     dropTargetOverlay(for: slot)
@@ -59,7 +59,7 @@ struct SlotGrid: View {
             .zIndex(isDragging ? 1 : 0)
             .overlay {
                 if isDragging {
-                    SlotView(slot: slot, isSelected: false, playbackPosition: 0, showLabel: false)
+                    SlotView(slot: slot, isSelected: false, showLabel: false, showPlayhead: false)
                         .offset(dragOffset)
                         .allowsHitTesting(false)
                 }
@@ -152,9 +152,9 @@ private struct SlotFrameKey: PreferenceKey {
 struct SlotView: View {
     let slot: Slot
     let isSelected: Bool
-    var playbackPosition: TimeInterval = 0
     var showNotes: Bool = true
     var showLabel: Bool = true
+    var showPlayhead: Bool = true
 
     private var noteBars: [NoteBar] {
         NoteBarBuilder.buildNoteBars(from: slot.events, duration: displayDuration)
@@ -190,10 +190,13 @@ struct SlotView: View {
                 NoteRollView(
                     noteBars: noteBars,
                     duration: displayDuration,
-                    playbackPosition: playbackPosition,
-                    showPlayhead: slot.state == .playing || slot.state == .muted,
                     dimmed: slot.state == .muted
                 )
+                .overlay {
+                    if showPlayhead && (slot.state == .playing || slot.state == .muted) {
+                        PlayheadOverlay(slotId: slot.id, duration: displayDuration)
+                    }
+                }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 8)
                 .allowsHitTesting(false)
