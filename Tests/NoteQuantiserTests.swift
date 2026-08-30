@@ -41,16 +41,38 @@ struct NoteQuantiserTests {
         #expect(isClose(result[1].timestamp, 0.9))
     }
 
-    @Test func noteOffClampedToLoopDuration() {
-        // Note-on near end of loop, note-off shift would exceed loop duration
+    @Test func noteOnSnappedToLoopEndWrapsToStart() {
+        // 1.8 snaps to 2.0 — the loop end, where it could never play.
+        // It wraps to 0.0 and the note-off follows, preserving duration.
         let events = [
             RecordedEvent(timestamp: 1.8, event: .noteOn(MIDIEvent.NoteOn(note: 60, velocity: .midi1(100), channel: 0))),
-            RecordedEvent(timestamp: 2.3, event: .noteOff(MIDIEvent.NoteOff(note: 60, velocity: .midi1(0), channel: 0))),
+            RecordedEvent(timestamp: 1.9, event: .noteOff(MIDIEvent.NoteOff(note: 60, velocity: .midi1(0), channel: 0))),
         ]
-        // 1.8 snaps to 2.0 (delta +0.2), note-off would be 2.5 but clamped to 2.0
         let result = NoteQuantiser.quantise(events: events, loopDuration: 2.0, grid: .quarter)
-        #expect(isClose(result[0].timestamp, 2.0))
-        #expect(result[1].timestamp <= 2.0)
+        #expect(isClose(result[0].timestamp, 0.0))
+        #expect(isClose(result[1].timestamp, 0.1))
+    }
+
+    @Test func noteOffClampedToLoopDuration() {
+        // Note-on snaps forward; its note-off shift would exceed loop duration
+        let events = [
+            RecordedEvent(timestamp: 1.4, event: .noteOn(MIDIEvent.NoteOn(note: 60, velocity: .midi1(100), channel: 0))),
+            RecordedEvent(timestamp: 1.95, event: .noteOff(MIDIEvent.NoteOff(note: 60, velocity: .midi1(0), channel: 0))),
+        ]
+        // 1.4 snaps to 1.5 (delta +0.1), note-off would be 2.05 but clamps to 2.0
+        let result = NoteQuantiser.quantise(events: events, loopDuration: 2.0, grid: .quarter)
+        #expect(isClose(result[0].timestamp, 1.5))
+        #expect(isClose(result[1].timestamp, 2.0))
+    }
+
+    @Test func ccEventsKeepTheirTiming() {
+        let events = [
+            RecordedEvent(timestamp: 0.13, event: .cc(64, value: .midi1(127), channel: 0)),
+            RecordedEvent(timestamp: 0.87, event: .cc(64, value: .midi1(0), channel: 0)),
+        ]
+        let result = NoteQuantiser.quantise(events: events, loopDuration: 2.0, grid: .quarter)
+        #expect(result[0].timestamp == 0.13)
+        #expect(result[1].timestamp == 0.87)
     }
 
     @Test func resultsSortedByTimestamp() {

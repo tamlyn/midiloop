@@ -299,10 +299,12 @@ final class LoopEngine {
         target.acceptTransfer(from: source)
         slotPlaybackOffsets[target.id] = slotPlaybackOffsets[source.id]
         slotPlaybackIndices[target.id] = slotPlaybackIndices[source.id]
+        slotPlaybackPositions[target.id] = slotPlaybackPositions[source.id]
 
         source.clear()
         slotPlaybackOffsets[source.id] = 0
         slotPlaybackIndices[source.id] = 0
+        slotPlaybackPositions[source.id] = 0
     }
 
     /// Merge a slot's events into another non-empty slot.
@@ -343,6 +345,7 @@ final class LoopEngine {
         slotPlaybackIndices = [0, 0, 0, 0]
         slotPlaybackOffsets = [0, 0, 0, 0]
         slotPlaybackPositions = [0, 0, 0, 0]
+        lastMasterPosition = 0
         undoStack.removeAll()
         pendingRecordingSnapshot = nil
     }
@@ -444,38 +447,39 @@ final class LoopEngine {
         session.updateLoopPosition(masterPosition)
 
         for slot in session.slots {
-            guard slot.state == .playing || slot.state == .muted else { continue }
-            guard slot.duration > 0 else { continue }
+            guard slot.state == .playing || slot.state == .muted, slot.duration > 0 else { continue }
 
             let slotElapsed = elapsed - slotPlaybackOffsets[slot.id]
             let slotPosition = slotElapsed.truncatingRemainder(dividingBy: slot.duration)
+            let wrapped = slotPosition < slotPlaybackPositions[slot.id]
             slotPlaybackPositions[slot.id] = slotPosition
 
             guard slot.state == .playing, !slot.events.isEmpty else { continue }
-            let index = slotPlaybackIndices[slot.id]
+            var idx = slotPlaybackIndices[slot.id]
 
-            // Detect loop wrap-around
-            if index > 0 && index < slot.events.count {
-                if slotPosition < slot.events[index - 1].timestamp {
-                    silence(slot)
-                    slotPlaybackIndices[slot.id] = 0
+            if wrapped {
+                // Play out the tail the previous tick didn't reach — notably
+                // note-offs landing exactly on the loop end — then cut
+                // anything still sounding before restarting the loop.
+                while idx < slot.events.count {
+                    play(slot.events[idx], on: slot)
+                    idx += 1
                 }
-            } else if index >= slot.events.count {
-                if let lastTimestamp = slot.events.last?.timestamp, slotPosition < lastTimestamp {
-                    silence(slot)
-                    slotPlaybackIndices[slot.id] = 0
-                }
+                silence(slot)
+                idx = 0
             }
 
-            var idx = slotPlaybackIndices[slot.id]
             while idx < slot.events.count && slot.events[idx].timestamp <= slotPosition {
-                let recorded = slot.events[idx]
-                midiService.send(event: recorded.event)
-                trackNote(event: recorded.event, slot: slot)
+                play(slot.events[idx], on: slot)
                 idx += 1
             }
             slotPlaybackIndices[slot.id] = idx
         }
+    }
+
+    private func play(_ recorded: RecordedEvent, on slot: Slot) {
+        midiService.send(event: recorded.event)
+        trackNote(event: recorded.event, slot: slot)
     }
 
     private func trackNote(event: MIDIEvent, slot: Slot) {

@@ -106,6 +106,36 @@ struct PlaybackResyncTests {
         #expect(sent.isEmpty, "Events before the undo position must not burst-replay")
     }
 
+    @Test func loopWrapFlushesTailEvents() {
+        let session = Session()
+        let midi = MIDIService()
+        let engine = LoopEngine(session: session, midiService: midi, pedalController: PedalController())
+        defer { engine.stop() }
+
+        // Note-off lands exactly on the loop end — a position playback can
+        // never reach, so it must flush when the loop wraps
+        recordClip(engine: engine, session: session, slotIndex: 0, events: [
+            noteOn(60, at: 0.5), noteOff(60, at: 4.0),
+        ], rawDuration: 4.0)
+
+        var sent: [MIDIEvent] = []
+        midi.sendMonitor = { sent.append(contentsOf: $0) }
+
+        let start = engine.playbackStartTime
+        engine.tick(now: start + 4.6)
+        #expect(sent.contains { isNoteOn($0, note: 60) })
+
+        engine.tick(now: start + 7.9)
+        #expect(!sent.contains { isNoteOff($0, note: 60) })
+
+        engine.tick(now: start + 8.1)
+        let offs = sent.filter { isNoteOff($0, note: 60) }
+        #expect(offs.count == 1, "The tail note-off plays exactly once at the wrap")
+
+        engine.tick(now: start + 8.6)
+        #expect(sent.filter { isNoteOn($0, note: 60) }.count == 2, "The note replays on the next pass")
+    }
+
     @Test func firstLoopPlaysFromTopImmediatelyAfterStop() {
         let session = Session()
         let midi = MIDIService()

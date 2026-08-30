@@ -21,7 +21,11 @@ enum NoteQuantiser {
         for recorded in events {
             switch recorded.event {
             case .noteOn(let payload):
-                let snapped = snapToGrid(recorded.timestamp, gridInterval: gridInterval)
+                var snapped = snapToGrid(recorded.timestamp, gridInterval: gridInterval)
+                // A note snapped to the loop end belongs at the top of the loop
+                if snapped >= loopDuration {
+                    snapped -= loopDuration
+                }
                 let delta = snapped - recorded.timestamp
                 let key = NoteKey(note: payload.note.number, channel: payload.channel)
                 activeDeltas[key] = delta
@@ -42,13 +46,9 @@ enum NoteQuantiser {
                 ))
 
             default:
-                // Non-note events (CC, pitch bend, etc.): snap to grid too
-                let snapped = snapToGrid(recorded.timestamp, gridInterval: gridInterval)
-                result.append(RecordedEvent(
-                    timestamp: max(0, snapped),
-                    takeIndex: recorded.takeIndex,
-                    event: recorded.event
-                ))
+                // Non-note events (sustain pedal especially) keep their played
+                // timing — shifting them to the grid audibly changes what sustains
+                result.append(recorded)
             }
         }
 
