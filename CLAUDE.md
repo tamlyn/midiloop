@@ -8,7 +8,7 @@ Requires Xcode 16.4+ and `xcodegen` (`brew install xcodegen`).
 
 ```sh
 xcodegen generate
-xcodebuild -project MIDILoop.xcodeproj -scheme MIDILoop -destination 'platform=iOS Simulator,name=iPhone 16 Pro' build
+xcodebuild -project MIDILoop.xcodeproj -scheme MIDILoop -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
 ```
 
 ### Device build (iPad)
@@ -23,7 +23,7 @@ Always regenerate the Xcode project with `xcodegen generate` after editing `proj
 ### Tests
 
 ```sh
-xcodebuild test -project MIDILoop.xcodeproj -scheme MIDILoop -destination 'platform=iOS Simulator,name=iPhone 16 Pro'
+xcodebuild test -project MIDILoop.xcodeproj -scheme MIDILoop -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
 
 Uses Swift Testing (`import Testing`), not XCTest. Tests need `@MainActor` for `@Observable` types.
@@ -78,7 +78,3 @@ project.yml    xcodegen project spec
 - MIDIKit uses `UInt7`/`UInt4` types — convert with `UInt8(value)` at boundaries.
 - SourceKit diagnostics lag behind actual build state — trust `xcodebuild` output.
 - `PreferenceKey` requires `nonisolated(unsafe)` on its `static var defaultValue` for Swift 6.
-
-## Gotchas
-
-- **Sandbox**: `xcodebuild` commands fail in sandbox mode due to Swift package cache permissions. Always run unsandboxed.
