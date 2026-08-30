@@ -202,10 +202,22 @@ final class LoopEngine {
         }
 
         slot.stopRecording(duration: finalDuration)
-        slotPlaybackIndices[slot.id] = 0
         slotPlaybackOffsets[slot.id] = startTime - playbackStartTime
+        resyncPlayback(for: slot, at: startTime + rawDuration)
 
         commitPendingRecordingUndo()
+    }
+
+    /// Aligns a slot's playback index with the current loop position without
+    /// sending anything, so playback resumes cleanly instead of bursting
+    /// through every event between the stale index and the current position.
+    private func resyncPlayback(for slot: Slot, at now: CFTimeInterval = CACurrentMediaTime()) {
+        guard slot.duration > 0 else { return }
+        let position = (now - playbackStartTime - slotPlaybackOffsets[slot.id])
+            .truncatingRemainder(dividingBy: slot.duration)
+        slotPlaybackPositions[slot.id] = position
+        slotPlaybackIndices[slot.id] =
+            slot.events.firstIndex { $0.timestamp >= position } ?? slot.events.count
     }
 
     // MARK: - Armed → Recording transition
@@ -263,6 +275,7 @@ final class LoopEngine {
             silence(slot)
             slot.toggleMute()
         } else if slot.state == .muted {
+            resyncPlayback(for: slot)
             slot.toggleMute()
         }
     }
@@ -303,8 +316,8 @@ final class LoopEngine {
         slotPlaybackOffsets[source.id] = 0
         slotPlaybackIndices[source.id] = 0
 
-        // Reset target playback index so merged events play correctly
-        slotPlaybackIndices[target.id] = 0
+        // Merged-in events behind the current position must not burst-replay
+        resyncPlayback(for: target)
     }
 
     // MARK: - Clear
@@ -350,7 +363,6 @@ final class LoopEngine {
         UndoEntry(
             label: label,
             slotSnapshots: slots.map { $0.snapshot() },
-            playbackIndices: slotPlaybackIndices,
             playbackOffsets: slotPlaybackOffsets,
             masterLoopDuration: session.masterLoopDuration,
             selectedSlotIndex: session.selectedSlotIndex
@@ -386,13 +398,16 @@ final class LoopEngine {
             }
         }
 
-        // Restore engine playback state
-        slotPlaybackIndices = entry.playbackIndices
         slotPlaybackOffsets = entry.playbackOffsets
 
         // Restore session state
         session.restoreMasterLoopDuration(entry.masterLoopDuration)
         session.selectSlot(entry.selectedSlotIndex)
+
+        // Indices from snapshot time are stale — realign with the clock
+        for snapshot in entry.slotSnapshots {
+            resyncPlayback(for: session.slots[snapshot.slotId])
+        }
     }
 
     func commitPendingRecordingUndo() {
