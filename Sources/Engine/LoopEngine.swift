@@ -24,6 +24,10 @@ final class LoopEngine {
     /// Tracks the last master loop position to detect boundary crossings.
     private var lastMasterPosition: TimeInterval = 0
 
+    /// Channels where the player is currently holding the sustain pedal,
+    /// tracked from incoming CC64 so recordings can capture pre-held sustain.
+    private var heldSustainChannels: Set<UInt4> = []
+
     /// Set when recording stops, to prevent quickPress from toggling mute.
     private var suppressNextQuickPress = false
 
@@ -67,13 +71,20 @@ final class LoopEngine {
 
     // MARK: - Incoming MIDI
 
-    private func handleIncomingEvent(_ event: MIDIEvent) {
+    func handleIncomingEvent(_ event: MIDIEvent) {
         if case .cc(let payload) = event {
             if pedalController.handleCC(
                 number: UInt8(payload.controller.number),
                 value: UInt8(payload.value.midi1Value)
             ) {
                 return
+            }
+            if payload.controller.number == 64 {
+                if payload.value.midi1Value >= 64 {
+                    heldSustainChannels.insert(payload.channel)
+                } else {
+                    heldSustainChannels.remove(payload.channel)
+                }
             }
         }
 
@@ -86,6 +97,7 @@ final class LoopEngine {
                 selectedSlot.startRecording()
                 recordingStartTime = CACurrentMediaTime()
                 recordingTakeIndex = session.claimNextTakeIndex()
+                injectHeldSustain(into: selectedSlot)
             } else {
                 return
             }
@@ -210,11 +222,24 @@ final class LoopEngine {
             slot.startRecording()
             recordingStartTime = boundaryTime
             recordingTakeIndex = session.claimNextTakeIndex()
+            injectHeldSustain(into: slot)
             for item in earlyMIDIEvents {
                 slot.addEvent(RecordedEvent(timestamp: 0.0, takeIndex: recordingTakeIndex, event: item.event))
             }
         }
         preRollBuffer.removeAll()
+    }
+
+    /// If the sustain pedal is already down when recording starts, record it
+    /// at the top of the loop so playback sustains the same way.
+    private func injectHeldSustain(into slot: Slot) {
+        for channel in heldSustainChannels {
+            slot.addEvent(RecordedEvent(
+                timestamp: 0.0,
+                takeIndex: recordingTakeIndex,
+                event: .cc(64, value: .midi1(127), channel: channel)
+            ))
+        }
     }
 
     private func computePreRollWindow() -> TimeInterval {
@@ -229,25 +254,25 @@ final class LoopEngine {
     // MARK: - Mute/Unmute
 
     func toggleMute() {
-        let slot = session.selectedSlot
+        toggleMute(slot: session.selectedSlot)
+    }
+
+    /// Toggle mute on a specific slot (for tap gesture on any slot).
+    func toggleMute(slot: Slot) {
         if slot.state == .playing {
-            midiService.sendNoteOffs(for: slot.activeNotes)
-            slot.clearActiveNotes()
+            silence(slot)
             slot.toggleMute()
         } else if slot.state == .muted {
             slot.toggleMute()
         }
     }
 
-    /// Toggle mute on a specific slot (for tap gesture on any slot).
-    func toggleMute(slot: Slot) {
-        if slot.state == .playing {
-            midiService.sendNoteOffs(for: slot.activeNotes)
-            slot.clearActiveNotes()
-            slot.toggleMute()
-        } else if slot.state == .muted {
-            slot.toggleMute()
-        }
+    /// Cuts everything this slot is sounding: note-offs for active notes and
+    /// sustain-off for any channel where its playback holds the pedal.
+    private func silence(_ slot: Slot) {
+        midiService.sendNoteOffs(for: slot.activeNotes)
+        midiService.sendSustainOff(channels: slot.sustainChannels)
+        slot.clearActiveNotes()
     }
 
     // MARK: - Move & Merge
@@ -256,8 +281,7 @@ final class LoopEngine {
     func moveSlot(from source: Slot, to target: Slot) {
         guard target.state == .empty else { return }
         pushUndo(label: "Move", slots: [source, target])
-        midiService.sendNoteOffs(for: source.activeNotes)
-        source.clearActiveNotes()
+        silence(source)
 
         target.acceptTransfer(from: source)
         slotPlaybackOffsets[target.id] = slotPlaybackOffsets[source.id]
@@ -271,8 +295,7 @@ final class LoopEngine {
     /// Merge a slot's events into another non-empty slot.
     func mergeSlot(source: Slot, into target: Slot) {
         pushUndo(label: "Merge", slots: [source, target])
-        midiService.sendNoteOffs(for: source.activeNotes)
-        source.clearActiveNotes()
+        silence(source)
 
         target.mergeEvents(from: source)
 
@@ -290,7 +313,7 @@ final class LoopEngine {
         let slot = session.selectedSlot
         if slot.state != .empty {
             pushUndo(label: "Clear", slots: [slot])
-            midiService.sendNoteOffs(for: slot.activeNotes)
+            silence(slot)
             slot.clear()
 
             if session.allSlotsEmpty {
@@ -313,7 +336,7 @@ final class LoopEngine {
 
     func clearSlot(_ slot: Slot) {
         pushUndo(label: "Clear", slots: [slot])
-        midiService.sendNoteOffs(for: slot.activeNotes)
+        silence(slot)
         slot.clear()
 
         if session.allSlotsEmpty {
@@ -355,7 +378,7 @@ final class LoopEngine {
         // Silence any active notes in affected slots
         for snapshot in entry.slotSnapshots {
             let slot = session.slots[snapshot.slotId]
-            midiService.sendNoteOffs(for: slot.activeNotes)
+            silence(slot)
             slot.restore(from: snapshot)
             // Armed is transient (pedal held) — never restore to it
             if slot.state == .armed {
@@ -387,9 +410,12 @@ final class LoopEngine {
     }
 
     @objc private func playbackTick() {
+        tick(now: CACurrentMediaTime())
+    }
+
+    func tick(now: CFTimeInterval) {
         guard let masterDuration = session.masterLoopDuration else { return }
 
-        let now = CACurrentMediaTime()
         let elapsed = now - playbackStartTime
         let masterPosition = elapsed.truncatingRemainder(dividingBy: masterDuration)
 
@@ -416,14 +442,12 @@ final class LoopEngine {
             // Detect loop wrap-around
             if index > 0 && index < slot.events.count {
                 if slotPosition < slot.events[index - 1].timestamp {
-                    midiService.sendNoteOffs(for: slot.activeNotes)
-                    slot.clearActiveNotes()
+                    silence(slot)
                     slotPlaybackIndices[slot.id] = 0
                 }
             } else if index >= slot.events.count {
                 if let lastTimestamp = slot.events.last?.timestamp, slotPosition < lastTimestamp {
-                    midiService.sendNoteOffs(for: slot.activeNotes)
-                    slot.clearActiveNotes()
+                    silence(slot)
                     slotPlaybackIndices[slot.id] = 0
                 }
             }
@@ -445,6 +469,8 @@ final class LoopEngine {
             slot.trackNoteOn(note: payload.note.number, channel: payload.channel)
         case .noteOff(let payload):
             slot.trackNoteOff(note: payload.note.number, channel: payload.channel)
+        case .cc(let payload) where payload.controller.number == 64:
+            slot.trackSustain(channel: payload.channel, down: payload.value.midi1Value >= 64)
         default:
             break
         }

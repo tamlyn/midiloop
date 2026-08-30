@@ -32,6 +32,9 @@ final class Slot: Identifiable {
     /// Notes currently sounding from this slot's playback.
     private(set) var activeNotes: Set<NoteKey> = []
 
+    /// Channels where this slot's playback is holding the sustain pedal down.
+    private(set) var sustainChannels: Set<UInt4> = []
+
     init(id: Int) {
         self.id = id
     }
@@ -60,8 +63,62 @@ final class Slot: Identifiable {
 
     func stopRecording(duration: TimeInterval) {
         guard state == .recording else { return }
+        events = Self.closeOpenNotes(in: Self.trim(events, to: duration), at: duration)
         self.duration = duration
         state = .playing
+    }
+
+    /// Drops events beyond a (possibly snapped-down) duration. Note-offs
+    /// landing exactly on the boundary are kept so notes can end there.
+    private static func trim(_ events: [RecordedEvent], to duration: TimeInterval) -> [RecordedEvent] {
+        events.filter { recorded in
+            if case .noteOn = recorded.event {
+                return recorded.timestamp < duration
+            }
+            return recorded.timestamp <= duration
+        }
+    }
+
+    /// Appends note-offs (and sustain-off) at the loop end for anything still
+    /// sounding, so keys or the sustain pedal held past the end of recording
+    /// don't leave the loop sustaining forever on playback.
+    private static func closeOpenNotes(in events: [RecordedEvent], at duration: TimeInterval) -> [RecordedEvent] {
+        var openNotes: [NoteKey: Int] = [:]
+        var openSustains: [UInt4: Int] = [:]
+
+        for recorded in events {
+            switch recorded.event {
+            case .noteOn(let payload):
+                openNotes[NoteKey(note: payload.note.number, channel: payload.channel)] = recorded.takeIndex
+            case .noteOff(let payload):
+                openNotes.removeValue(forKey: NoteKey(note: payload.note.number, channel: payload.channel))
+            case .cc(let payload) where payload.controller.number == 64:
+                if payload.value.midi1Value >= 64 {
+                    openSustains[payload.channel] = recorded.takeIndex
+                } else {
+                    openSustains.removeValue(forKey: payload.channel)
+                }
+            default:
+                break
+            }
+        }
+
+        var closed = events
+        for (key, takeIndex) in openNotes {
+            closed.append(RecordedEvent(
+                timestamp: duration,
+                takeIndex: takeIndex,
+                event: .noteOff(key.note, velocity: .midi1(0), channel: key.channel)
+            ))
+        }
+        for (channel, takeIndex) in openSustains {
+            closed.append(RecordedEvent(
+                timestamp: duration,
+                takeIndex: takeIndex,
+                event: .cc(64, value: .midi1(0), channel: channel)
+            ))
+        }
+        return closed
     }
 
     func toggleMute() {
@@ -80,6 +137,7 @@ final class Slot: Identifiable {
         events = []
         duration = 0
         activeNotes = []
+        sustainChannels = []
     }
 
     func trackNoteOn(note: UInt7, channel: UInt4) {
@@ -90,8 +148,17 @@ final class Slot: Identifiable {
         activeNotes.remove(NoteKey(note: note, channel: channel))
     }
 
+    func trackSustain(channel: UInt4, down: Bool) {
+        if down {
+            sustainChannels.insert(channel)
+        } else {
+            sustainChannels.remove(channel)
+        }
+    }
+
     func clearActiveNotes() {
         activeNotes = []
+        sustainChannels = []
     }
 
     func snapshot() -> SlotSnapshot {
@@ -108,6 +175,7 @@ final class Slot: Identifiable {
         events = snapshot.events
         duration = snapshot.duration
         activeNotes = []
+        sustainChannels = []
     }
 
     /// Accepts events and state from another slot (for drag-to-move).

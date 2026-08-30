@@ -223,7 +223,8 @@ struct SlotTests {
         target.acceptTransfer(from: source)
 
         #expect(target.state == .muted)
-        #expect(target.events.count == 1)
+        // The unclosed note-on gets a closing note-off at the loop end
+        #expect(target.events.count == 2)
         #expect(target.duration == 1.0)
     }
 

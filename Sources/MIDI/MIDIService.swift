@@ -90,16 +90,16 @@ final class MIDIService: @unchecked Sendable {
         onMIDIEvent?(event)
     }
 
+    /// Observes every outgoing event. Used by tests to capture sent MIDI.
+    var sendMonitor: (([MIDIEvent]) -> Void)?
+
     func send(event: MIDIEvent) {
-        guard let connection = midi.managedOutputConnections[Self.outputConnectionTag] else {
-            return
-        }
-        do {
-            try connection.send(event: event)
-        } catch {}
+        send(events: [event])
     }
 
     func send(events: [MIDIEvent]) {
+        guard !events.isEmpty else { return }
+        sendMonitor?(events)
         guard let connection = midi.managedOutputConnections[Self.outputConnectionTag] else {
             return
         }
@@ -115,9 +115,21 @@ final class MIDIService: @unchecked Sendable {
         send(events: events)
     }
 
+    func sendSustainOff(channels: Set<UInt4>) {
+        let events = channels.map { channel in
+            MIDIEvent.cc(64, value: .midi1(0), channel: channel)
+        }
+        send(events: events)
+    }
+
+    /// A note-off alone doesn't silence a piano holding the sustain pedal,
+    /// so release sustain on every channel before All Notes Off.
     func sendAllNotesOff() {
-        let events = (0..<16).map { channel in
-            MIDIEvent.cc(123, value: .midi1(0), channel: UInt4(channel))
+        let events = (0..<16).flatMap { channel in
+            [
+                MIDIEvent.cc(64, value: .midi1(0), channel: UInt4(channel)),
+                MIDIEvent.cc(123, value: .midi1(0), channel: UInt4(channel)),
+            ]
         }
         send(events: events)
     }
